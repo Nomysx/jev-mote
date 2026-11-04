@@ -1,7 +1,8 @@
-// Background thinking scheduler. While you're away from the keyboard, Mote asks the decision model
-// what is on its mind every few minutes. It adapts to the model's speed (slow models think less
-// often), waits until you've been idle for a while, pauses when the window is hidden, and cancels a
-// thought in progress the moment you start typing.
+// The page's side of Mote's inner life. While you watch but aren't typing, Mote asks the decision
+// model what is on its mind every few minutes (or, asleep, dreams when its sleep cycle comes round).
+// It adapts to the model's speed (slow models think less often), waits until you've been idle for
+// a while, pauses when the window is hidden (the server's own heartbeat takes over then), and
+// cancels a thought in progress the moment you start typing.
 
 import type { ThinkResponse } from '../api';
 
@@ -11,16 +12,14 @@ const IDLE_BEFORE_THINKING_MS = 45_000;
 export interface MindPrefs {
   /** Show Mote's thoughts as floating words (off = the original, fully wordless Mote). */
   thoughts: boolean;
-  /** Let Mote think on its own while you're idle (uses your model every few minutes). */
-  background: boolean;
 }
 
 export function loadMindPrefs(): MindPrefs {
   try {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<MindPrefs>;
-    return { thoughts: p.thoughts !== false, background: p.background !== false };
+    return { thoughts: p.thoughts !== false };
   } catch {
-    return { thoughts: true, background: true };
+    return { thoughts: true };
   }
 }
 

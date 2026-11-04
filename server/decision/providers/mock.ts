@@ -111,6 +111,7 @@ function choiceBias(name: string, key: string, c: Cues): number {
   if (name === 'blob_intent') return (intentBias(c)[key] ?? 0) * 1;
   if (name === 'idle_thought') return idleThoughtBias(c)[key] ?? 0;
   if (name === 'idle_action') return idleActionBias(c)[key] ?? 0;
+  if (name.startsWith('dream_')) return dreamBias(name, c)[key] ?? 0;
   if (key === 'none' || key === 'other') return c.total === 0 ? 1.5 : 0;
   return (c.scores[key] ?? 0) * 4;
 }
@@ -126,23 +127,60 @@ function intentBias(c: Cues): Record<string, number> {
   return { listen: 2.5 };
 }
 
-/** Background thinking reads the state itself: mood words, time of day, a memory. */
+/** Background thinking reads the state itself: mood words, body, time of day, a memory. */
 function idleThoughtBias(c: Cues): Record<string, number> {
   const t = c.text;
   const b: Record<string, number> = {};
   if (/night/.test(t)) b.sleepy = 3;
+  if (/tired|exhausted/.test(t)) b.sleepy = Math.max(b.sleepy ?? 0, 2.5);
   if (/hurt|grudge/.test(t)) Object.assign(b, { still_hurt: 3, forgiving: 1 });
   if (/happy|calm/.test(t)) Object.assign(b, { content: 1.5, grateful: 1.5 });
   if (/"memory"/.test(t)) Object.assign(b, { remember_good: 2, remember_hard: 1.2 });
-  if (/days? ago/.test(t)) b.miss_writer = 2.5;
+  if (/days? ago|misses the writer/.test(t)) b.miss_writer = 2.5;
+  if (/restless/.test(t)) b.bored = 2;
   return b;
 }
 
 function idleActionBias(c: Cues): Record<string, number> {
   const t = c.text;
-  if (/night/.test(t)) return { nap: 3 };
+  if (/night|exhausted/.test(t)) return { nap: 3 };
   if (/hurt|grudge/.test(t)) return { sulk: 2.5 };
+  if (/misses the writer/.test(t)) return { wait_by_text: 2.5, look_around: 1 };
+  if (/restless/.test(t)) return { wander: 2.5, stretch: 1 };
   return { look_around: 1, hum: 1, glow: 1, wander: 1, wait_by_text: 1 };
+}
+
+/** Dreams follow the memory's feeling: an insult becomes a chase, good news a flight. */
+function dreamBias(name: string, c: Cues): Record<string, number> {
+  const s = c.scores;
+  const bias: Record<string, number> = {};
+  const add = (k: string, v: number) => (bias[k] = (bias[k] ?? 0) + v);
+  if (name === 'dream_place') {
+    if (s.work) add('school', 3 * s.work);
+    if (s.relationships) add('home', 3 * s.relationships);
+    if (s.joy) add('sky', 2 * s.joy);
+    if (s.sadness) add('sea', 2 * s.sadness);
+    if (s.fear || c.hostile) add('dark', 2.5);
+    if (s.curiosity) add('space', 2);
+    if (s.calm) add('forest', 2);
+  } else if (name === 'dream_event') {
+    if (c.hostile) add('chased', 3.5);
+    if (s.joy) add('flying', 3 * s.joy);
+    if (s.sadness) (add('lost', 2.5 * s.sadness), add('searching', 1.5));
+    if (s.fear) (add('falling', 2.5 * s.fear), add('chased', 1));
+    if (s.anger) add('storm', 3 * s.anger);
+    if (s.calm) (add('floating', 2.5), add('held', 1.5));
+    if (s.relationships) add('reunion', 2);
+    if (s.curiosity) add('growing', 1.5);
+  } else if (name === 'dream_feeling') {
+    for (const k of ['joy', 'sadness', 'anger', 'fear', 'calm', 'curiosity', 'disgust']) add(k, 3 * (s[k] ?? 0));
+    if (c.hostile) add('fear', 2);
+  } else if (name === 'dream_ending') {
+    if (c.hostile || s.fear) add('woke_suddenly', 2.5);
+    if (s.joy || s.calm) (add('peaceful', 2), add('found', 1.5));
+    if (s.sadness) (add('faded', 1.5), add('transformed', 1));
+  }
+  return bias;
 }
 
 function yesProbability(name: string, c: Cues): number {

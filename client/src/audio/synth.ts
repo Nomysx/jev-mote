@@ -6,7 +6,7 @@ import { clamp } from '../../../shared/math';
 import type { Emotion } from '../../../shared/types';
 import { moodPitch, moodTempo, type MoodTone, type Voice } from './voice';
 
-export type SoundKind = Emotion | 'pulse' | 'absorb' | 'poke' | 'birth' | 'pop' | 'wake' | 'soothe' | 'puzzled' | 'thought' | 'decide' | 'hum' | 'snore' | 'hmph';
+export type SoundKind = Emotion | 'pulse' | 'absorb' | 'poke' | 'birth' | 'pop' | 'wake' | 'soothe' | 'puzzled' | 'thought' | 'decide' | 'hum' | 'snore' | 'hmph' | 'dream' | 'murmur';
 
 export const SOUND_KINDS: SoundKind[] = [
   'joy',
@@ -29,6 +29,8 @@ export const SOUND_KINDS: SoundKind[] = [
   'hum',
   'snore',
   'hmph',
+  'dream',
+  'murmur',
 ];
 
 export interface SoundOptions {
@@ -667,6 +669,66 @@ const RECIPES: Record<SoundKind, Recipe> = {
     noise(c, { at: 1.2, dur: 1.3, gain: 0.025 * v.g, filter: { type: 'lowpass', freq: 450, to: 300 }, attack: 0.2, release: 0.5 });
     tone(c, { at: 1.25, dur: 1.1, freq: [[0, v.P * 0.3]], gain: 0.04 * v.g, attack: 0.3, release: 0.5 });
     return 3;
+  },
+
+  /** Going into a dream: a slow, wide chord in its voice that blooms and drifts, with a glassy shimmer. */
+  dream(c: Ctx, v: V) {
+    const root = v.P * 0.5;
+    [1, 3 / 2, 2, 5 / 2, 3].forEach((m, i) => {
+      tone(c, {
+        at: i * 0.35,
+        dur: 5.2 - i * 0.35,
+        freq: [
+          [0, root * m * 0.995],
+          [4.8, root * m * 1.005],
+        ],
+        type: i === 0 ? 'triangle' : 'sine',
+        gain: (i === 0 ? 0.05 : 0.035) * v.g,
+        attack: 1.6,
+        release: 2.2,
+        detune: (i % 2 ? 7 : -7) * (1 + i * 0.3),
+        vibrato: { rate: 0.6 + i * 0.25, depth: 6 },
+        filter: { type: 'lowpass', freq: 500 * v.B, to: 1800 * v.B },
+        pan: (i - 2) * 0.35,
+      });
+    });
+    [0, 1.1, 2.3, 3.2].forEach((at, i) => {
+      tone(c, { at: 1.2 + at, dur: 0.05, freq: [[0, v.P * 4 * [1, 1.5, 1.25, 2][i]]], gain: 0.018 * v.g, attack: 0.004, release: 0.9, pan: i % 2 ? 0.6 : -0.6 });
+    });
+    return 8;
+  },
+
+  /** Talking in its sleep: a soft, wordless "mm-mm" with a breath. */
+  murmur(c: Ctx, v: V, o: SoundOptions) {
+    const lift = 1 + ((o.variant ?? 0.5) - 0.5) * 0.2;
+    noise(c, { at: 0, dur: 0.5, gain: 0.02 * v.g, filter: { type: 'lowpass', freq: 600 }, attack: 0.2, release: 0.3 });
+    tone(c, {
+      at: 0.15,
+      dur: 0.35 * v.K,
+      freq: [
+        [0, v.P * 0.7 * lift],
+        [0.3 * v.K, v.P * 0.62 * lift],
+      ],
+      type: v.wave,
+      gain: 0.045 * v.g,
+      attack: 0.08,
+      release: 0.2,
+      filter: { type: 'lowpass', freq: 700 * v.B },
+    });
+    tone(c, {
+      at: 0.6 * v.K,
+      dur: 0.45 * v.K,
+      freq: [
+        [0, v.P * 0.66 * lift],
+        [0.4 * v.K, v.P * 0.72 * lift],
+      ],
+      type: v.wave,
+      gain: 0.035 * v.g,
+      attack: 0.1,
+      release: 0.3,
+      filter: { type: 'lowpass', freq: 650 * v.B },
+    });
+    return 1.6 * v.K;
   },
 
   /** Sulking: a little "hmph". */

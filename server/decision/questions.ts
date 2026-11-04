@@ -170,9 +170,91 @@ export const SITUATION_CRITERIA: Record<string, string> = {
 };
 
 /**
+ * Dreams: asked while Mote sleeps. The state holds the memory it dreams about (maybe a second one
+ * that wandered in), its mood before sleep, and for bigger models its temperament and grudges.
+ */
+export function buildDreamQuestions(): Questions {
+  return {
+    dream_place: {
+      type: 'choice',
+      instructions: 'The small creature is asleep, dreaming about memory. Where does the dream take place?',
+      criteria: {
+        sky: 'High in the sky, among clouds',
+        sea: 'In or near deep water',
+        forest: 'In a forest or a garden',
+        city: 'In a busy city or a crowd',
+        home: 'In a house or a familiar room',
+        school: 'At a school or a workplace',
+        space: 'Out among the stars',
+        dark: 'Somewhere dark and unknown',
+      },
+    },
+    dream_event: {
+      type: 'choice',
+      instructions: 'What happens to the creature in the dream about memory?',
+      criteria: {
+        flying: 'It flies freely',
+        falling: 'It falls',
+        chased: 'Something chases it',
+        lost: 'It is lost and cannot find the way back',
+        searching: 'It searches for something important',
+        floating: 'It floats gently',
+        held: 'Something holds it, safe and warm',
+        reunion: 'It meets someone it misses',
+        storm: 'It is caught in a storm',
+        melting: 'It melts or changes shape',
+        growing: 'It grows huge',
+        shrinking: 'It becomes tiny',
+      },
+    },
+    dream_feeling: {
+      type: 'choice',
+      instructions: 'How does the dream about memory feel to the creature?',
+      criteria: {
+        joy: 'Happy or delighted',
+        sadness: 'Sad or lonely',
+        anger: 'Angry or frustrated',
+        fear: 'Scary or worrying',
+        calm: 'Calm and peaceful',
+        curiosity: 'Curious and strange',
+        disgust: 'Unpleasant or gross',
+      },
+    },
+    dream_ending: {
+      type: 'choice',
+      instructions: 'How does the dream about memory end?',
+      criteria: {
+        peaceful: 'It ends calmly and peacefully',
+        woke_suddenly: 'The creature wakes up suddenly, startled',
+        faded: 'It fades away before the end',
+        transformed: 'Everything changes into something new',
+        found: 'Things work out, or it finds what it was looking for',
+      },
+    },
+  };
+}
+
+/** What each background thought means, in words (to tell the model what it thought last time). */
+export const IDLE_THOUGHT_WORDS: Record<string, string> = {
+  remember_good: 'thinking back on a happy moment',
+  remember_hard: 'thinking about a hard moment',
+  miss_writer: 'missing the writer',
+  wonder_day: "wondering how the writer's day is going",
+  worried: 'worrying about the writer',
+  grateful: 'glad the writer is in its life',
+  still_hurt: 'still hurt',
+  forgiving: 'letting go of an old hurt',
+  sleepy: 'getting sleepy',
+  bored: 'a little bored',
+  content: 'calm and content',
+  curious: 'curious about something new',
+  daydream: 'daydreaming',
+};
+
+/**
  * Background thinking: asked while nobody is writing. The state describes the creature (mood,
- * temperament, grudges), the time of day, how long since the last entry, and maybe one remembered
- * entry. Memory options are only offered when there is a memory.
+ * body, temperament, grudges), the time of day, how long since the last entry, what it last thought
+ * about, and maybe one remembered entry. Memory options are only offered when there is a memory.
  */
 export function buildIdleQuestions(hasMemory: boolean): Questions {
   const memory: Record<string, string> = hasMemory

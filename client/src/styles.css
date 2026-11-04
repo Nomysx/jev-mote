@@ -74,6 +74,8 @@ textarea {
 #stage {
   position: absolute;
   inset: 0;
+  /* Its own stacking context: the dreamscape sits under the canvas, both under everything else. */
+  z-index: 0;
 }
 
 .blob-canvas {
@@ -713,5 +715,664 @@ input[type='range'] {
   }
   .mind-choice {
     font-size: 12px;
+  }
+}
+
+/* ---- Mote's life: sleeping, dreams, while you were away ---- */
+.blob-canvas {
+  position: relative;
+  z-index: 1;
+}
+
+body.mote-asleep {
+  background: radial-gradient(ellipse at 50% 42%, var(--glow), transparent 55%), linear-gradient(160deg, var(--bg-1), var(--bg-1));
+}
+
+.sleep-z {
+  position: absolute;
+  font-weight: 700;
+  color: var(--text-dim);
+  opacity: 0;
+  pointer-events: none;
+  animation: sleep-z 4.2s ease-out forwards;
+  text-shadow: 0 0 10px var(--thought-glow);
+}
+
+@keyframes sleep-z {
+  0% {
+    transform: translate(0, 0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate(34px, -70px) scale(1.15) rotate(12deg);
+    opacity: 0;
+  }
+}
+
+.away-card {
+  position: absolute;
+  top: 60px;
+  left: 18px;
+  width: min(360px, calc(100% - 32px));
+  max-height: calc(100% - 220px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  animation: fade-in 1.2s ease;
+  z-index: 4;
+}
+
+.away-card h2 {
+  margin: 0 0 2px;
+  font-size: 1rem;
+}
+
+.away-card ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.away-card li,
+.life-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+  padding: 4px 0;
+  color: var(--text-dim);
+}
+
+.away-card li.dream,
+.life-row.dream {
+  color: var(--text);
+}
+
+.away-card .when,
+.life-row .when {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.quote {
+  font-style: italic;
+  color: var(--text-faint);
+}
+
+.dream-offer {
+  display: block;
+  margin: 0 auto 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  animation: fade-in 1.2s ease;
+  box-shadow: 0 0 22px var(--thought-glow);
+}
+
+.dream-offer:hover {
+  border-color: var(--accent);
+}
+
+/* The dream theater */
+.dreamscape {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    opacity 1.4s ease,
+    filter 2.6s ease;
+  background: var(--dream-bg, #000);
+}
+
+.dreamscape.on {
+  opacity: 1;
+}
+
+.dreamscape.fading {
+  filter: blur(8px) brightness(0.6);
+}
+
+.dreamscape.flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: dream-flash 1s ease-out forwards;
+}
+
+@keyframes dream-flash {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.place-sky {
+  --dream-bg: linear-gradient(180deg, #1b2f57 0%, #45679a 55%, #8fb3d9 100%);
+  --pc: rgb(255 255 255 / 0.35);
+}
+.place-sea {
+  --dream-bg: linear-gradient(180deg, #0d4a6b 0%, #062a45 55%, #020f1f 100%);
+  --pc: rgb(180 230 255 / 0.55);
+}
+.place-forest {
+  --dream-bg: radial-gradient(ellipse at 50% 30%, #2e5a3a 0%, #13301e 55%, #07150c 100%);
+  --pc: rgb(200 230 120 / 0.7);
+}
+.place-city {
+  --dream-bg: linear-gradient(180deg, #160f2a 0%, #2a1c45 60%, #3a2350 100%);
+  --pc: rgb(255 214 120 / 0.9);
+}
+.place-home {
+  --dream-bg: radial-gradient(ellipse at 50% 45%, #6b4430 0%, #3a2418 55%, #1c110b 100%);
+  --pc: rgb(255 220 170 / 0.8);
+}
+.place-school {
+  --dream-bg: linear-gradient(180deg, #4a5674 0%, #2b3247 60%, #171b28 100%);
+  --pc: rgb(240 240 255 / 0.5);
+}
+.place-space {
+  --dream-bg: radial-gradient(ellipse at 50% 50%, #1a1240 0%, #08061a 60%, #02010a 100%);
+  --pc: rgb(255 255 255 / 0.95);
+}
+.place-dark {
+  --dream-bg: radial-gradient(ellipse at 50% 50%, #0d0b14 0%, #000 70%);
+  --pc: rgb(160 150 200 / 0.6);
+}
+
+.dreamscape .p {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: var(--pc);
+  opacity: 0;
+  animation-duration: var(--dur);
+  animation-delay: var(--d);
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+.place-sky .p {
+  filter: blur(18px);
+  height: calc(var(--s) * 0.45);
+}
+
+.place-school .p {
+  border-radius: 2px;
+  height: calc(var(--s) * 1.3);
+}
+
+.place-city .p {
+  border-radius: 1px;
+}
+
+.dreamscape .p.rise {
+  animation-name: dream-rise;
+}
+.dreamscape .p.fall {
+  animation-name: dream-fall;
+}
+.dreamscape .p.drift {
+  animation-name: dream-drift;
+}
+.dreamscape .p.twinkle {
+  animation-name: dream-twinkle;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes dream-rise {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-115vh);
+    opacity: 0;
+  }
+}
+
+@keyframes dream-fall {
+  0% {
+    transform: translate(0, 0) rotate(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(9vw, 115vh) rotate(280deg);
+    opacity: 0;
+  }
+}
+
+@keyframes dream-drift {
+  0% {
+    transform: translateX(-40vw);
+    opacity: 0;
+  }
+  20%,
+  80% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateX(120vw);
+    opacity: 0;
+  }
+}
+
+@keyframes dream-twinkle {
+  0%,
+  100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.in-dream .top-bar,
+.in-dream .composer,
+.in-dream .away-card,
+.in-dream .status-card {
+  opacity: 0.12;
+  transition: opacity 1.2s ease;
+}
+
+.dream-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  cursor: pointer;
+  overflow: hidden;
+  animation: fade-in 1.4s ease;
+  transition: opacity 0.8s ease;
+}
+
+.dream-layer.leaving {
+  opacity: 0;
+}
+
+.dream-caption {
+  position: absolute;
+  top: 13%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90vw, 640px);
+  text-align: center;
+  font-size: 23px;
+  font-weight: 700;
+  color: #f6f2ff;
+  text-shadow:
+    0 0 22px rgb(200 180 255 / 0.85),
+    0 1px 2px rgb(0 0 0 / 0.4);
+  opacity: 0;
+  transition: opacity 0.7s ease;
+}
+
+.dream-caption.show {
+  opacity: 1;
+}
+
+.dream-sub {
+  position: absolute;
+  top: calc(13% + 42px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(90vw, 560px);
+  text-align: center;
+  font-size: 14px;
+  font-style: italic;
+  color: rgb(240 235 255 / 0.78);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
+}
+
+.dream-hint {
+  position: absolute;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: rgb(240 235 255 / 0.45);
+}
+
+.dream-word {
+  position: absolute;
+  left: 0;
+  white-space: nowrap;
+  font-style: italic;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.8);
+  text-shadow: 0 0 14px rgb(190 170 255 / 0.85);
+  pointer-events: none;
+  animation-name: dream-word;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: forwards;
+}
+
+@keyframes dream-word {
+  from {
+    transform: translateX(var(--from));
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.75;
+  }
+  80% {
+    opacity: 0.55;
+  }
+  to {
+    transform: translateX(var(--to));
+    opacity: 0;
+  }
+}
+
+/* Journal tabs, dreams and inner life */
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+
+.tab {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.tab[aria-selected='true'] {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.entry.dream .text b {
+  font-weight: 700;
+}
+
+.entry .quote {
+  display: block;
+  font-size: 0.84rem;
+  margin-top: 2px;
+}
+
+.chip.core {
+  color: #2a1d06;
+  background: #f3c56b;
+  border-color: transparent;
+}
+
+.btn.small {
+  padding: 2px 10px;
+  font-size: 0.8rem;
+}
+
+.life-log h4 {
+  margin: 14px 0 4px;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.life-row {
+  font-size: 0.88rem;
+}
+
+/* Growth: the mind map */
+.mindmap {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 58px 20px 14px;
+  background: color-mix(in srgb, var(--bg-1) 98%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.mindmap .close-btn {
+  position: absolute;
+  top: 62px;
+  right: 18px;
+}
+
+.mm-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.mm-who {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.mm-head .faint {
+  margin: 2px 0 6px;
+}
+
+.mm-body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+  min-height: 0;
+}
+
+.mm-graph {
+  position: relative;
+  min-height: 0;
+}
+
+.mm-canvas {
+  width: 100%;
+  height: calc(100% - 22px);
+  display: block;
+}
+
+.mm-legend {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.mm-empty {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(360px, 90%);
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.mm-tip {
+  position: absolute;
+  width: 240px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  pointer-events: none;
+  display: grid;
+  gap: 3px;
+}
+
+.mm-quote {
+  font-style: italic;
+}
+
+.mm-side {
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.mm-side h3 {
+  margin: 10px 0 6px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.mm-trait {
+  display: grid;
+  grid-template-columns: 10px 84px 1fr 28px 32px;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  padding: 2px 0;
+}
+
+.mm-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.mm-spark {
+  width: 100%;
+  height: 26px;
+}
+
+.mm-trait .val {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mm-trait .delta {
+  font-size: 0.76rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mm-trait .delta.up {
+  color: var(--ok);
+}
+
+.mm-trait .delta.down {
+  color: var(--danger);
+}
+
+.mm-milestones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.84rem;
+}
+
+.mm-milestones li {
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+.mm-milestones li:hover,
+.mm-milestones li:focus {
+  background: var(--surface-2);
+  outline: none;
+}
+
+.mm-milestones li.future {
+  opacity: 0.35;
+}
+
+.mm-milestones .when {
+  display: inline-block;
+  min-width: 52px;
+  color: var(--text-faint);
+}
+
+.mm-timeline {
+  display: grid;
+  grid-template-columns: auto 1fr 120px;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.mm-track {
+  position: relative;
+}
+
+.mm-track input {
+  width: 100%;
+}
+
+.mm-ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -6px;
+  height: 6px;
+}
+
+.mm-ticks span {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: #f3c56b;
+}
+
+.mm-date {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+@media (max-width: 760px) {
+  .mindmap {
+    overflow-y: auto;
+    grid-template-rows: auto auto auto;
+  }
+  .mm-body {
+    grid-template-columns: 1fr;
+  }
+  .mm-graph {
+    height: 62vh;
+  }
+  .mm-timeline {
+    grid-template-columns: auto 1fr;
+  }
+  .mm-date {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+  .away-card {
+    top: 56px;
+    left: 16px;
   }
 }

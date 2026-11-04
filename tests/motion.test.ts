@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GESTURE_DURATION, GestureRig, gesturePose, type GestureKind, type Pose } from '../client/src/blob/gestures';
+import { dreamFrame, GESTURE_DURATION, GestureRig, gesturePose, type GestureKind, type Pose } from '../client/src/blob/gestures';
+import { DREAM_EVENTS } from '../shared/types';
 import { moodPitch, moodTempo, voiceFromTemperament } from '../client/src/audio/voice';
 import { generateTemperament } from '../server/mood/temperament';
 import { temperament } from './helpers';
@@ -107,5 +108,38 @@ describe('voices', () => {
     expect(moodPitch({ valence: 1, arousal: 0.3, trust: 0.5, clarity: 0.8 })).toBeGreaterThan(1);
     expect(moodPitch({ valence: -1, arousal: 0.3, trust: 0.5, clarity: 0.8 })).toBeLessThan(1);
     expect(moodTempo(v, { valence: 0, arousal: 1, trust: 0.5, clarity: 0.8 })).toBeLessThan(moodTempo(v, { valence: 0, arousal: 0, trust: 0.5, clarity: 0.8 }));
+  });
+});
+
+describe('dream motion', () => {
+  const mag = (f: ReturnType<typeof dreamFrame>) => Math.max(...Object.values(f.pose).map(Math.abs), Math.abs(f.brightness), Math.abs(f.speed), f.halo, f.grey);
+
+  it('eases in and out with no jumps, for every kind of dream', () => {
+    for (const k of DREAM_EVENTS) {
+      const dur = 6.5;
+      expect(mag(dreamFrame(k, 0, dur)), k).toBe(0);
+      expect(mag(dreamFrame(k, dur - 0.001, dur)), k).toBeLessThan(0.01);
+      expect(mag(dreamFrame(k, dur + 1, dur)), k).toBe(0);
+      let prev = dreamFrame(k, 0, dur);
+      for (let t = 1 / 60; t < dur; t += 1 / 60) {
+        const f = dreamFrame(k, t, dur);
+        for (const key of Object.keys(f.pose) as (keyof Pose)[]) expect(Math.abs(f.pose[key] - prev.pose[key]), `${k}.${key} at ${t.toFixed(2)}`).toBeLessThan(0.06);
+        prev = f;
+      }
+    }
+  });
+
+  it('acts out each dream in its own way', () => {
+    const peak = (k: (typeof DREAM_EVENTS)[number], key: keyof Pose, sign = 1) => {
+      let m = 0;
+      for (let t = 0; t < 6.5; t += 0.02) m = Math.max(m, sign * dreamFrame(k, t, 6.5).pose[key]);
+      return m;
+    };
+    expect(peak('flying', 'y')).toBeGreaterThan(0.3);
+    expect(peak('falling', 'y', -1)).toBeGreaterThan(0.2);
+    expect(peak('growing', 'scale')).toBeGreaterThan(0.25);
+    expect(peak('shrinking', 'scale', -1)).toBeGreaterThan(0.25);
+    expect(peak('storm', 'spikes')).toBeGreaterThan(0.3);
+    expect(peak('chased', 'x')).toBeGreaterThan(0.3);
   });
 });

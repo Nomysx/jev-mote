@@ -17,12 +17,15 @@
         <nav>
           <button type="button" class="icon-btn" id="btn-sound" aria-pressed="true">Sound on</button>
           <button type="button" class="icon-btn" id="btn-journal" aria-label="Journal">Journal</button>
+          <button type="button" class="icon-btn" id="btn-growth" aria-label="How Mote is growing">Growth</button>
           <button type="button" class="icon-btn" id="btn-settings" aria-label="Settings">Settings</button>
           <button type="button" class="icon-btn" id="btn-debug" aria-label="Debug panel" hidden>Debug</button>
         </nav>
       </header>
       <div id="wellbeing" class="wellbeing" hidden></div>
+      <div id="away" class="away-card" hidden role="region" aria-label="While you were away"></div>
       <form id="composer" class="composer" autocomplete="off">
+        <button type="button" id="dream-offer" class="dream-offer" hidden>✦ Mote had a dream · watch it</button>
         <div id="notice" class="notice" role="status" aria-live="polite"></div>
         <div class="composer-box">
           <textarea id="entry" rows="1" maxlength="20000" placeholder="Write to Mote…" aria-label="Journal entry"></textarea>
@@ -32,6 +35,7 @@
       </form>
       <aside id="journal" class="panel panel-left" hidden aria-label="Journal"></aside>
       <aside id="settings" class="panel panel-right" hidden aria-label="Settings"></aside>
+      <aside id="growth" class="mindmap" hidden aria-label="How Mote is growing"></aside>
       <aside id="debug" class="debug-panel" hidden aria-label="Debug panel"></aside>
     </div>
     <script type="module" src="/src/main.ts"></script>

@@ -17,6 +17,10 @@ export interface DebugDeps {
   thinkNow: () => void;
   onTick: (t: TickResponse) => void;
   onRebirth: (s: StateResponse) => void;
+  /** Mote's life: dream right now (asks the model), wake it, replay its newest dream. */
+  dreamNow: () => void;
+  wakeNow: () => void;
+  replayDream: () => void;
 }
 
 export function createDebug(el: HTMLElement, deps: DebugDeps) {
@@ -83,6 +87,16 @@ export function createDebug(el: HTMLElement, deps: DebugDeps) {
     h('b', {}, 'Debug'),
     h('h3', {}, 'Time'),
     h('div', { class: 'row' }, ff(1, '+1 h'), ff(6, '+6 h'), ff(24, '+1 day'), ff(72, '+3 days'), ff(168, '+7 days')),
+    h('p', { class: 'faint' }, 'Mote lives through skipped time: it sleeps, wakes, and shows what it did. Thoughts and dreams only come from the model, so they don’t happen during a jump.'),
+    h('h3', {}, "Mote's life"),
+    h(
+      'div',
+      { class: 'row' },
+      btn('sleep now', async () => deps.onTick(await api.debugSleep())),
+      btn('dream now (asks the model)', () => deps.dreamNow()),
+      btn('wake up', () => deps.wakeNow()),
+      btn('replay newest dream', () => deps.replayDream()),
+    ),
     h('h3', {}, 'Mood engine'),
     moodPre,
     h('h3', {}, 'Reactions (preview only, mood unchanged)'),

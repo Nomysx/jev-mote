@@ -7,6 +7,7 @@ import { loadConfig } from './config';
 import { MoteDb } from './db';
 import { Catalog } from './decision/catalog';
 import { createProvider } from './decision/registry';
+import { LifeLoop } from './life/loop';
 import { MoteService } from './service';
 
 async function main() {
@@ -33,7 +34,14 @@ async function main() {
     log(`[mote] listening on http://${config.host}:${info.port}${config.production ? '' : ' (API; open the Vite URL in dev)'}`);
   });
 
+  // Mote keeps living while the page is closed: its body clock, and (if allowed in settings)
+  // thoughts on its own and dreams while nobody is watching.
+  const life = new LifeLoop(service, log);
+  life.start();
+  log(`[mote] Mote's life is running${service.backgroundOn() ? '' : ' (thinking on its own is off in settings)'}.`);
+
   const shutdown = () => {
+    life.stop();
     db.close();
     process.exit(0);
   };

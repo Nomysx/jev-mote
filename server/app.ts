@@ -12,7 +12,7 @@ export function createApp(service: MoteService, config: AppConfig): Hono {
 
   app.onError((err, c) => {
     const msg = err instanceof Error ? err.message : String(err);
-    const clientError = /empty message|invalid model name|invalid json/i.test(msg);
+    const clientError = /empty message|invalid model name|invalid json|dream not found/i.test(msg);
     if (!clientError) console.error('[mote] request failed:', err);
     return c.json({ error: msg }, clientError ? 400 : 500);
   });
@@ -26,8 +26,13 @@ export function createApp(service: MoteService, config: AppConfig): Hono {
     }
   };
 
-  app.get('/api/state', async (c) => c.json(await service.state()));
-  app.get('/api/tick', async (c) => c.json(await service.tick(c.req.query('force') === '1')));
+  const num = (v: string | undefined) => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
+
+  app.get('/api/state', async (c) => c.json(await service.state(false, { idleMs: num(c.req.query('idle')) ?? 0 })));
+  // seen=0: the page is open but hidden (Mote is on its own, and will tell you what it did).
+  app.get('/api/tick', async (c) =>
+    c.json(await service.tick(c.req.query('force') === '1', c.req.query('seen') === '0' ? null : { idleMs: num(c.req.query('idle')) ?? 0 })),
+  );
 
   app.post('/api/message', async (c) => {
     const b = await body(c);
@@ -36,20 +41,28 @@ export function createApp(service: MoteService, config: AppConfig): Hono {
 
   app.get('/api/journal', (c) => {
     const q = c.req.query();
-    const n = (v: string | undefined) => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
     return c.json({
       entries: service.journal({
         lifeArea: q.area || undefined,
         emotion: q.emotion || undefined,
-        before: n(q.before),
-        since: n(q.since),
-        limit: n(q.limit),
+        before: num(q.before),
+        since: num(q.since),
+        limit: num(q.limit),
       }),
     });
   });
 
-  // Background thinking. Cancelled (and the model request with it) if the browser drops the request.
+  // Mote's inner life. Thinking on its own is cancelled (with the model request) if the browser drops the request.
   app.post('/api/think', async (c) => c.json(await service.think(c.req.raw.signal)));
+  app.post('/api/wake', async (c) => c.json(await service.wake('poke')));
+  app.get('/api/dreams', (c) => c.json(service.dreams({ before: num(c.req.query('before')), limit: num(c.req.query('limit')) })));
+  app.post('/api/dreams/:id/seen', async (c) => c.json(await service.markDreamSeen(Number(c.req.param('id')))));
+  app.get('/api/character', async (c) => c.json(await service.character()));
+  app.get('/api/life', (c) => c.json(service.lifeLog({ before: num(c.req.query('before')), limit: num(c.req.query('limit')) })));
+  app.post('/api/settings/life', async (c) => {
+    const b = await body(c);
+    return c.json(service.setBackground(b.background !== false));
+  });
 
   app.get('/api/models', async (c) => c.json(await service.models()));
   app.post('/api/settings/model', async (c) => {
@@ -62,6 +75,8 @@ export function createApp(service: MoteService, config: AppConfig): Hono {
       const b = await body(c);
       return c.json(await service.fastForward(Number(b.hours)));
     });
+    app.post('/api/debug/sleep', async (c) => c.json(await service.sleepNow()));
+    app.post('/api/debug/dream', async (c) => c.json(await service.dreamNow()));
     app.post('/api/debug/rebirth', async (c) => {
       const b = await body(c);
       return c.json(await service.rebirth(b.seed === undefined || b.seed === '' ? undefined : Number(b.seed)));

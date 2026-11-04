@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { hueDelta } from '../../../shared/math';
 import type { Emotion } from '../../../shared/types';
 import { DEFAULT_VISUAL, HUE_KEYS, VISUAL_KEYS, type VisualParams } from '../../../shared/visuals';
-import { BEHAVIOR_DURATION, behaviorFrame, GestureRig, scaleFrame, type BehaviorKind, type GestureKind } from './gestures';
+import { BEHAVIOR_DURATION, behaviorFrame, GestureRig, scaleFrame, type BehaviorFrame, type BehaviorKind, type GestureKind } from './gestures';
 import { applyVisual, createBlobGeometry, createBlobMaterial } from './material';
 import { mistFragmentShader, mistVertexShader, RIPPLE_COUNT } from './shaders';
 
@@ -31,7 +31,9 @@ export type BlobEvent =
   | { type: 'birth-pop' }
   | { type: 'absorb' }
   | { type: 'wake' }
-  | { type: 'poke'; strength: number; pan: number };
+  | { type: 'poke'; strength: number; pan: number; asleep: boolean }
+  /** A twitch in its sleep (dreaming). */
+  | { type: 'twitch' };
 
 export interface ReactionOptions {
   /** 0..1, how strong the feeling in the entry was. */
@@ -142,6 +144,14 @@ export class BlobView {
   private tmpQuat = new THREE.Quaternion();
   private behavior: { kind: BehaviorKind; start: number; dur: number; release: number | null } | null = null;
   private haloBoost = 0;
+  /** Sleep: 0 awake .. 1 asleep (eased), and whether it is dreaming (REM twitches). */
+  private sleep = 0;
+  private sleepTarget = 0;
+  private dreamingNow = false;
+  private nextTwitch = 0;
+  private nextSigh = 0;
+  private dreamMotion: (() => BehaviorFrame) | null = null;
+  private remGlow = 0;
 
   /** Called every frame with the current (eased) visual, e.g. to tint the page background. */
   onFrame: ((v: VisualParams) => void) | null = null;
@@ -351,6 +361,25 @@ export class BlobView {
     this.dimTarget = on ? 1 : 0;
   }
 
+  /** Asleep: it stops following the cursor and breathes slowly; dreaming, it twitches now and then. */
+  setSleep(asleep: boolean, dreaming = false) {
+    if (asleep && this.sleepTarget === 0) {
+      this.nextTwitch = this.time + 4 + Math.random() * 6;
+      this.nextSigh = this.time + 12 + Math.random() * 10;
+    }
+    this.sleepTarget = asleep ? 1 : 0;
+    this.dreamingNow = asleep && dreaming;
+  }
+
+  get asleep(): boolean {
+    return this.sleepTarget === 1;
+  }
+
+  /** A dream being acted out (the dream theater supplies one frame of motion per animation frame). */
+  setDreamMotion(fn: (() => BehaviorFrame) | null) {
+    this.dreamMotion = fn;
+  }
+
   /** A surprising entry: a jolt, a flash and a wave running down from the top. */
   pulse() {
     this.pulseValue = 1;
@@ -500,9 +529,12 @@ export class BlobView {
     if (!hit || this.time - this.lastPoke < 0.12) return;
     this.lastPoke = this.time;
     const dir = hit.clone().sub(this.mesh.position).normalize();
-    this.addRipple(dir, 1);
-    this.rig.play('poke', this.time, 0.8 + Math.random() * 0.3);
-    this.onEvent?.({ type: 'poke', strength: 1, pan: Math.max(-1, Math.min(1, dir.x)) });
+    const asleep = this.asleep;
+    this.addRipple(dir, asleep ? 0.5 : 1);
+    // Asleep, a poke only makes it stir.
+    if (asleep) this.rig.play('twitch', this.time, 1);
+    else this.rig.play('poke', this.time, 0.8 + Math.random() * 0.3);
+    this.onEvent?.({ type: 'poke', strength: 1, pan: Math.max(-1, Math.min(1, dir.x)), asleep });
   }
 
   // ---- the frame loop ----
@@ -555,6 +587,32 @@ export class BlobView {
       sleepy = bf.sleepy;
       this.haloBoost = bf.halo;
     }
+    // A dream being acted out layers on top, like a behavior.
+    if (this.dreamMotion) {
+      const df = this.dreamMotion();
+      for (const key of Object.keys(pose) as (keyof typeof pose)[]) pose[key] += df.pose[key];
+      base.brightness = Math.max(0, base.brightness + df.brightness);
+      base.speed = Math.max(0.05, base.speed * (1 + df.speed));
+      base.grey = clamp01(base.grey + df.grey);
+      this.haloBoost += df.halo;
+    }
+    // Asleep: twitches while dreaming (REM), an occasional deep sigh otherwise.
+    this.sleep += (this.sleepTarget - this.sleep) * (1 - Math.exp(-dt / 2.5));
+    this.remGlow *= Math.exp(-dt / 0.9);
+    if (this.sleepTarget === 1 && !this.dreamMotion) {
+      if (this.dreamingNow && this.time >= this.nextTwitch) {
+        this.rig.play('twitch', this.time, 0.6 + Math.random() * 0.5);
+        this.addRipple(new THREE.Vector3().randomDirection(), this.reduceMotion ? 0.1 : 0.3);
+        this.remGlow = 1;
+        this.onEvent?.({ type: 'twitch' });
+        this.nextTwitch = this.time + 5 + Math.random() * 9;
+      }
+      if (this.time >= this.nextSigh) {
+        this.rig.play('calm', this.time, 0.45);
+        this.nextSigh = this.time + 18 + Math.random() * 14;
+      }
+    }
+    this.haloBoost += 0.3 * this.remGlow;
     const v: VisualParams = { ...base, spikes: clamp01(base.spikes + pose.spikes), wobble: clamp01(base.wobble + pose.wobble) };
     const still = 1 - 0.93 * v.dim;
     const motion = this.reduceMotion ? 0.4 : 1;
@@ -591,22 +649,23 @@ export class BlobView {
     const sxz = 1 / Math.sqrt(Math.max(0.2, sy));
     this.mesh.scale.set(s * sxz, s * sy, s * sxz);
 
+    const awake = 1 - this.sleep;
     const dir = new THREE.Vector3(this.cursor.x * 2.2, this.cursor.y * 1.4, 1).normalize();
-    const cursorDir = new THREE.Vector3(0, 0, 1).lerp(dir, this.cursorActive).normalize();
-    const pull = (v.lean * 0.3 - v.avoid * 0.38) * this.cursorActive;
+    const cursorDir = new THREE.Vector3(0, 0, 1).lerp(dir, this.cursorActive * awake).normalize();
+    const pull = (v.lean * 0.3 - v.avoid * 0.38) * this.cursorActive * awake;
     const tremble = this.reduceMotion ? 0 : v.shrink * 0.012 * Math.sin(this.time * 37) * still;
     const bob = Math.sin(this.time * 0.7) * 0.06 * (1 - 0.6 * v.droop) * still;
     this.mesh.position.set(
       cursorDir.x * pull + tremble + pose.x,
-      -v.sink * 0.55 - v.dim * 0.22 + bob + bounce + cursorDir.y * pull * 0.6 + pose.y - 0.05 * this.attention,
-      cursorDir.z * pull * 0.2 + pose.z + 0.12 * this.attention,
+      -v.sink * 0.55 - v.dim * 0.22 + bob + bounce + cursorDir.y * pull * 0.6 + pose.y - 0.05 * this.attention * awake,
+      cursorDir.z * pull * 0.2 + pose.z + 0.12 * this.attention * awake,
     );
 
     // Where it "looks": wanders slowly when idle, follows the cursor when curious, turns away when afraid.
-    const wander = (1 - this.cursorActive) * still * motion;
-    const look = this.cursorActive * (0.25 + 0.5 * v.lean - 0.6 * v.avoid) * still;
+    const wander = (1 - this.cursorActive * awake) * still * motion * (1 - 0.8 * this.sleep);
+    const look = this.cursorActive * (0.25 + 0.5 * v.lean - 0.6 * v.avoid) * still * awake;
     const yaw = (0.16 * Math.sin(this.time * 0.11 + this.seedPhase) + 0.08 * Math.sin(this.time * 0.29)) * wander + this.cursor.x * 0.45 * look + pose.yaw;
-    const pitch = 0.06 * Math.sin(this.time * 0.17 + 1.3) * wander - this.cursor.y * 0.25 * look + pose.pitch + 0.1 * this.attention;
+    const pitch = 0.06 * Math.sin(this.time * 0.17 + 1.3) * wander - this.cursor.y * 0.25 * look + pose.pitch + 0.1 * this.attention * awake;
     const roll = 0.05 * Math.sin(this.time * 0.13 + this.seedPhase * 2) * wander + pose.roll;
     this.mesh.rotation.set(pitch, yaw, roll);
 

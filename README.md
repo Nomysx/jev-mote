@@ -6,7 +6,9 @@ A fully local emotional journaling companion. The only things on screen are a so
 
 - **Temperament at birth.** Each Mote gets a random, permanent personality (an archetype plus seeded jitter).
 - **Memory and mood.** It remembers recent history, warms up slowly, holds grudges, and drifts back to its baseline over time, even while the app is closed.
-- **Journaling.** Every entry is saved with the model's answers and a snapshot of how Mote looked. The journal shows a timeline with thumbnails, a weekly mood strip, and filters.
+- **A life of its own.** It has a body clock: it gets tired, sleeps at night, dreams about what you wrote, wakes in the morning and misses you while you're away. It keeps living while the page is closed, and tells you what it did when you come back.
+- **It grows.** Its character (warmth, trust, courage, wariness, curiosity, playfulness, dreaminess) is shaped by how you treat it, what it thinks about and what it dreams. The **Growth** view is a living map of that, with a timeline you can play back.
+- **Journaling.** Every entry is saved with the model's answers and a snapshot of how Mote looked. The journal shows a timeline with thumbnails, a weekly mood strip, and filters, plus Mote's dreams and its inner life.
 
 Everything runs on your machine. Entries live in one SQLite file. The only network connection the app makes is to your local Ollama server.
 
@@ -230,7 +232,11 @@ More moments:
 
 ### Journal
 
-Each entry stores the text, timestamp, the full model answers (with provider and model), the derived signals, and a snapshot of the visual parameters. The journal view shows a timeline with a thumbnail of each snapshot (rendered with the same shader), a weekly mood strip (one blob per day from your average feelings that day), and filters by life area and emotion.
+Each entry stores the text, timestamp, the full model answers (with provider and model), the derived signals, what Mote decided to do, and a snapshot of the visual parameters. The journal has three tabs:
+
+- **Entries**: a timeline with a thumbnail of each snapshot (rendered with the same shader), a weekly mood strip (one blob per day from your average feelings that day), and filters by life area and emotion. Entries Mote keeps coming back to are marked as **core memories**.
+- **Dreams**: every dream, with what it was about, how it felt and what it did to Mote. Press Watch to replay one.
+- **Inner life**: everything Mote did on its own, by day: each thought and what it did next, falling asleep, waking up, dreaming.
 
 ### Mote's mind: thoughts, decisions and thinking on its own
 
@@ -239,10 +245,39 @@ Decision models don't write text: they score a fixed set of options. Mote shows 
 - **Thoughts are the model's real probabilities.** After an entry, candidate thoughts float up around Mote, each sized by the probability the model gave that kind of moment (one of 20: a win, a loss, an insult, an apology, a hello, worry, self-criticism...). They drift and compete; the strongest settles on top while Mote reacts. When the model is torn, the rivals stay close and blurred, and nothing fully settles.
 - **The words are written in advance.** Each kind of moment has a few short lines, many in each archetype's own voice (an anxious Mote thinks "did i do something?" where a stoic one thinks "noted."). The model only picks; the line is chosen by the entry's id, so the journal shows the same thought later.
 - **Then it decides what to do.** A small ring of actions appears (come closer, comfort, celebrate, give space, hide, listen, play, rest) and one is chosen and acted out. The final choice weighs the model's suggestion against what fits the moment and Mote's temperament (`shared/decide.ts`). In testing, small models sometimes suggested odd actions, such as "play" after an insult; this keeps decisions sensible, and an anxious Mote hides where a stoic one listens.
-- **It thinks on its own.** While you're idle, Mote asks the model what's on its mind every few minutes (less often with slow models), for example a memory of one of your entries, missing you, getting sleepy, or still being hurt. Then it does something: naps, hums, wanders, sulks, waits by the text box or glows. The state it judges contains its mood, temperament, grudges, the time of day, how long you've been away, and maybe one past entry chosen in code: recent, strong ones are likelier, and entries that raised a distress flag are never resurfaced. Background thinking never changes the mood, pauses when the window is hidden, and is cancelled (with the model request) the moment you start typing. It only runs while your model is already loaded (from your last entry), so it never loads a model by itself, and it never keeps a model in memory longer than `OLLAMA_KEEP_ALIVE` would.
-- **Your choice.** In Settings → Mote's mind, turn thoughts off for the original wordless Mote, or turn off thinking on its own.
+- **It thinks on its own.** Every few minutes while you watch (less often with slow models), and every 25 to 40 minutes while nobody does, Mote asks the model what's on its mind: a memory of one of your entries, missing you, getting sleepy, still being hurt, letting go of a hurt, being bored... Then it does something: naps, hums, wanders, sulks, waits by the text box or glows. The state it judges contains its mood, its body (energy, missing you, restlessness), its temperament and character, grudges, the time of day, how long you've been away, what it thought last time (so thoughts follow on from each other), and maybe one past entry chosen in code: recent, strong ones are likelier, core memories can come back from long ago, and entries that raised a distress flag are never resurfaced. What it decides weighs the model's suggestion against the thought, the time of day and its body: a tired Mote naps, a restless one wanders, one that misses you waits by the text box.
+- **Thoughts change it, a little.** Each thought nudges the mood by its expected effect over the model's probabilities (a happy memory lifts it, worrying weighs on it, letting go eases grudges). The effects are small and only ever heal grudges, never deepen them: your entries stay what moves Mote most. Thinking it's sleepy late at night can turn a nap into real sleep.
+- **Considerate.** Thinking on its own is cancelled (with the model request) the moment you start typing or send an entry. It only runs while your model is already loaded, so it never loads a model by itself, and it never keeps a model in memory longer than `OLLAMA_KEEP_ALIVE` would.
+- **Your choice.** In Settings → Mote's mind, turn thoughts off for the original wordless Mote, or turn off its life on its own (it still sleeps and wakes, but doesn't think or dream).
 
-Tested on real models: tev1:0.8b read all eight test moments correctly (win, insult, grief, hello, goodnight, apology, worry, self-criticism; 78 to 100%) and Laya six of eight. Background thoughts made sense on tev1:0.8b too ("still hurt" late at night after an insult, "missing you" after two days away).
+Tested on real models: tev1:0.8b read all eight test moments correctly (win, insult, grief, hello, goodnight, apology, worry, self-criticism; 78 to 100%) and Laya six of eight. Background thoughts made sense on tev1:0.8b too ("still hurt" late at night after an insult, "missing you" after two days away), and on Laya ("still hurt" → sulk after an insult, a happy memory of "I got the job" → glow).
+
+### Mote's life: a body clock, sleep and dreams
+
+Like the mood, Mote's body is simulated in code (`server/life/engine.ts`), and the model is only asked what it thinks and dreams.
+
+- **Energy and sleep.** Energy drains while it's awake (faster when it's stirred up, a little with each entry) and refills while it sleeps. Sleep pressure is low energy plus the time of day, so it falls asleep at night, never within 20 minutes of you doing something, and wakes up with the morning. A nap it decides on can become real sleep. Asleep, it's dim, round and slow-breathing, floats little z's, and doesn't follow the cursor. Write to it and it wakes up (groggy if it was early); poke it three times and it wakes up too.
+- **Missing you, without guilt.** It misses you more the longer you're gone and the more it trusts you. That only shapes what it thinks about and how glad it is when you're back: Mote never gets worse because you were away.
+- **Dreams.** Sleep runs in 90-minute cycles; in the dreaming (REM) part of a cycle it twitches now and then, and dreams (at most twice a night). Code picks what it dreams about: the day's residue, so the last three days, strong entries more, hard ones (painful, or unkind to it) half as likely again, sometimes two memories mixed, now and then a core memory from long ago, and never an entry that raised a distress flag. The model chooses where the dream goes (8 places), what happens (12 happenings: flying, falling, being chased, being lost, a reunion...), how it feels, and how it ends (peacefully, waking with a start, fading, changing into something new, finding it).
+- **Dreams change it.** Sleeping on a hard day helps: a hard dream with a calm ending eases grudges and lifts the mood. A nightmare wakes it up jumpy for a while. A sweet dream leaves it lighter.
+- **Watching a dream.** When it has a new dream, "Mote had a dream · watch it" appears above the text box. The page turns into the dream's place (sky, sea, forest, city, home, school, space, the dark); the possible happenings surface like thoughts and one wins (the model's real probabilities); Mote acts it out in the dream's colors while words from your entries drift past; and it ends the way the model chose. If the model was torn between two happenings, the dream shifts from one to the other halfway. Click or press Esc to leave.
+- **Its life goes on while the page is closed.** The Mote server has a heartbeat (`server/life/loop.ts`): once a minute its body moves on, and while no page is watching it thinks now and then and dreams in its sleep. When you come back, a "While you were away" card lists what it did (thoughts, sleep, dreams, waking up), and it greets you: overjoyed if it missed you, sulky if it's still hurt, sleepy if it's tired. If the server or the computer was off, the gap is simulated on the next heartbeat (it slept, it woke up), but no thoughts are invented: they only ever come from the model. A night it slept through without the model leaves a dream it may remember later.
+- **Memories that matter.** Entries it thinks or dreams about three times become core memories: they can come back in its thoughts and dreams long after the last two weeks.
+
+Tested on light models (Laya and tev1:0.8b, about 2 s per dream): after "My boss yelled at me…" Laya dreamed of being chased in the dark (68%, with "shrinking" 32%, so the dream shifts), sad, ending peacefully (it slept on a hard day); a worry about a sick parent became being held, sad, peaceful.
+
+### Growth: who Mote is becoming
+
+Mote's temperament is its nature, fixed at birth. Its character grows from there (`server/life/character.ts`): kindness makes it warmer and less wary; being hurt or brushed off makes it warier; your questions and big changes make it curious; joy and wins make it playful; every dream makes it more of a dreamer; sleeping on hard days and letting go of hurts make it braver, and nightmares shake it. Traits drift slowly back toward its nature over weeks, so recent life matters most, but nothing is wiped. Character is never stored: it is replayed from the journal and the inner-life log, so every change points at the entry, thought or dream that caused it, and it works for entries written before this existed.
+
+It is not just a chart: who Mote has become leans on what it does. A warm Mote comes closer, a wary one keeps its distance, a playful one plays, a brave one hides less. Bigger models also get its character in words ("a warm, playful dreamer who trusts you") in their state.
+
+The **Growth** button opens a living map of it:
+
+- Mote in the middle, its seven traits around it, sized by how strong they are (a dashed ring shows where each started).
+- Your entries as memories, colored by feeling, pulled toward the traits they shaped; dreams as little stars, tied to the memories they grew from; core memories tied to Mote itself, thicker the more often it comes back to them. Hover or tap anything to see what it was and what it changed.
+- Milestones (first words, first kindness, the first time it got hurt, first dream, first nightmare, slept on a hard day, a core memory formed, began to trust you, grew warm, became a dreamer...) and what it thinks about most on its own.
+- A timeline: scrub it, click a milestone, or press **Play its life** to watch it grow from birth to now.
 
 ### Wellbeing safeguard
 
@@ -255,7 +290,8 @@ If `distress_flag` comes back with reasonable probability (threshold in `tuning.
 With `MOTE_DEBUG=true`, a **Debug** button appears (or open the app with `?debug`):
 
 - Sliders for every visual parameter, to tune the mapping without any model.
-- **Fast-forward time** (+1 h to +7 days): mood decay, trust and grudges run on a shifted clock, so you can simulate days of journaling.
+- **Fast-forward time** (+1 h to +7 days): mood decay, trust, grudges and Mote's body clock run on a shifted clock, so you can simulate days of journaling. It sleeps and wakes through the skipped time, and the "While you were away" card shows what happened.
+- **Mote's life**: put it to sleep, make it dream right now (this asks the model, loading it if needed), wake it up, and replay its newest dream.
 - **Rebirth** with an optional seed: compare two blobs (the seed is shown in Settings).
 - A live readout of the mood engine (emotions, trust, grudges).
 - **Reaction previews**: play any gesture and sound (each emotion, mixed, unsure, surprise, entry arriving, soothe, puzzled, wake, birth) without a model and without changing the mood.
@@ -303,7 +339,7 @@ export default factory;
 ## Privacy and offline use
 
 - No cloud APIs, analytics, telemetry or CDN assets. Three.js and the Nunito font are installed from npm and bundled, and all sounds are synthesized in the browser (no audio files).
-- Background thinking only talks to the same local model, and only while the page is open and visible.
+- Thinking and dreaming on its own only talk to the same local model, only while that model is already loaded, and also while the page is closed (as long as the Mote server runs). Turn it off in Settings → Mote's mind.
 - The server binds to `127.0.0.1` and only calls `OLLAMA_URL`, which must be local. Cloud models are refused by tag (`:cloud`, `-cloud`) and by the remote host Ollama reports for them.
 - After `npm install` (and pulling a model), the app works with the network disconnected.
 
@@ -317,19 +353,21 @@ npm test
 npm run typecheck
 ```
 
-Unit tests cover the mood engine (decay, trust, grudges, reactions, temperament), the state builder (budget trimming, field selection), response parsing, the Ollama provider's checks against a fake local server, the mock provider, the catalog, the gesture curves (they start and end at rest with no jumps) and the voices (fixed per seed, different between blobs).
+Unit tests cover the mood engine (decay, trust, grudges, reactions, temperament), the state builder (budget trimming, field selection), response parsing, the Ollama provider's checks against a fake local server, the mock provider, the catalog, the gesture and dream-motion curves (they start and end at rest with no jumps), the voices (fixed per seed, different between blobs), the body clock (sleeping at night, waking in the morning, never falling asleep while you're active, REM and dreams), what thoughts and dreams do to it, dream memories (never distress entries), character growth and milestones, and a whole simulated night end to end: it thinks, falls asleep, dreams about your day, wakes up and tells you what it did.
 
 ## Project layout
 
 ```
 client/            Vite + TypeScript + Three.js front end
-  src/blob/        shader, live blob view, gestures, thumbnails
+  src/blob/        shader, live blob view, gestures, dream motion, thumbnails
   src/audio/       synthesized sounds and per-blob voices
-  src/ui/          journal, settings, debug panel
+  src/mind/        thoughts, thinking on its own, dream theater, lines
+  src/ui/          journal, growth map, settings, away card, debug panel
 server/            Hono + better-sqlite3 back end
   decision/        DecisionProvider interface, questions, parsing, state builder, catalog
     providers/     ollama.ts, mock.ts (add one file per provider)
   mood/            temperament, mood engine, tuning constants
+  life/            body clock, dreams, character growth, the heartbeat that keeps it living
 shared/            types and the visual mapping used by both sides
 tests/             vitest unit tests
 ```

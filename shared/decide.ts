@@ -5,7 +5,7 @@
 // actions that fit, and makes temperament visible: an anxious Mote hides where a stoic one listens.
 
 import { normalize } from './math';
-import { IDLE_ACTIONS, INTENTS, type Archetype, type IdleAction, type IdleThought, type Intent, type Situation } from './types';
+import { IDLE_ACTIONS, INTENTS, type Archetype, type IdleAction, type IdleThought, type Intent, type Situation, type Traits } from './types';
 
 const FIT: Record<Situation, Partial<Record<Intent, number>>> = {
   greeting: { come_closer: 1, play: 0.8, listen: 0.6, celebrate: 0.4 },
@@ -38,13 +38,32 @@ const LEAN: Record<Archetype, Partial<Record<Intent, number>>> = {
   curious: { come_closer: 1.3, play: 1.2, listen: 1.1 },
 };
 
-/** The final decision: model suggestion x fit with the moment x temperament. */
-export function decideIntent(model: Record<Intent, number>, situation: Record<Situation, number>, archetype: Archetype): Record<Intent, number> {
+/**
+ * Who Mote has become leans on its choices, on top of its temperament: a warm Mote comes closer,
+ * a wary one keeps its distance, a playful one plays, a brave one hides less. Near 1 for a character
+ * that is still close to its nature.
+ */
+export function characterLean(c: Traits): Record<Intent, number> {
+  return {
+    come_closer: 0.85 + 0.35 * c.warmth + 0.1 * c.curiosity,
+    comfort: 0.85 + 0.35 * c.warmth,
+    celebrate: 0.85 + 0.3 * c.playfulness,
+    give_space: 0.85 + 0.35 * c.wariness,
+    hide: (0.9 + 0.5 * c.wariness) * (1.15 - 0.35 * c.courage),
+    listen: 0.9 + 0.15 * c.courage + 0.1 * c.curiosity,
+    play: 0.8 + 0.45 * c.playfulness,
+    rest: 1,
+  };
+}
+
+/** The final decision: model suggestion x fit with the moment x temperament (x character). */
+export function decideIntent(model: Record<Intent, number>, situation: Record<Situation, number>, archetype: Archetype, character?: Traits): Record<Intent, number> {
   const out = {} as Record<Intent, number>;
+  const lean = character ? characterLean(character) : null;
   for (const i of INTENTS) {
     let fit = 0;
     for (const [s, p] of Object.entries(situation) as [Situation, number][]) fit += p * (FIT[s][i] ?? 0);
-    out[i] = (0.15 + (model[i] ?? 0)) * (0.08 + fit) * (LEAN[archetype][i] ?? 1);
+    out[i] = (0.15 + (model[i] ?? 0)) * (0.08 + fit) * (LEAN[archetype][i] ?? 1) * (lean?.[i] ?? 1);
   }
   return normalize(out);
 }
@@ -65,15 +84,55 @@ const IDLE_FIT: Record<IdleThought, Partial<Record<IdleAction, number>>> = {
   daydream: { wander: 1, hum: 0.6, nap: 0.3 },
 };
 
-/** What to do while idle: the model's suggestion x fit with what's on its mind x time of day. */
-export function decideIdleAction(model: Record<IdleAction, number>, thought: Record<IdleThought, number>, hour: number): Record<IdleAction, number> {
+/** Energy, restlessness and missing the writer, all 0..1 (see server/life/engine.ts). */
+export interface Body {
+  energy: number;
+  boredom: number;
+  longing: number;
+}
+
+/**
+ * What to do while idle: the model's suggestion x fit with what's on its mind x time of day x its
+ * body (a tired Mote naps, a restless one wanders, one that misses you waits by the text box).
+ */
+export function decideIdleAction(model: Record<IdleAction, number>, thought: Record<IdleThought, number>, hour: number, body?: Body, character?: Traits): Record<IdleAction, number> {
   const night = hour < 6 || hour >= 23;
+  const tired = body ? Math.min(1, Math.max(0, (0.45 - body.energy) / 0.35)) : 0;
+  const bored = body?.boredom ?? 0;
+  const missing = body?.longing ?? 0;
+  // A need both fits an action (like a thought does) and pushes toward it: exhaustion wins over a
+  // content hum, but mild restlessness only tips the balance.
+  const need: Partial<Record<IdleAction, number>> = {
+    nap: tired,
+    wander: 0.9 * bored,
+    look_around: 0.3 * bored,
+    stretch: 0.3 * bored,
+    wait_by_text: 0.8 * missing,
+  };
+  const push: Partial<Record<IdleAction, number>> = {
+    nap: 1 + tired,
+    wander: 1 + 0.6 * bored,
+    look_around: 1 + 0.4 * bored,
+    stretch: 1 + 0.3 * bored,
+    wait_by_text: 1 + 0.8 * missing,
+  };
+  const c = character;
+  const lean: Partial<Record<IdleAction, number>> = c
+    ? {
+        hum: 0.85 + 0.3 * c.playfulness,
+        wander: 0.85 + 0.3 * c.playfulness,
+        glow: 0.85 + 0.3 * c.warmth,
+        wait_by_text: 0.85 + 0.3 * c.warmth,
+        sulk: 0.8 + 0.4 * c.wariness,
+        look_around: 0.9 + 0.2 * c.curiosity,
+      }
+    : {};
   const out = {} as Record<IdleAction, number>;
   for (const a of IDLE_ACTIONS) {
-    let fit = 0;
+    let fit = need[a] ?? 0;
     for (const [k, p] of Object.entries(thought) as [IdleThought, number][]) fit += p * (IDLE_FIT[k][a] ?? 0);
     const time = night ? (a === 'nap' ? 2 : a === 'hum' || a === 'wander' ? 0.6 : 1) : 1;
-    out[a] = (0.15 + (model[a] ?? 0)) * (0.08 + fit) * time;
+    out[a] = (0.15 + (model[a] ?? 0)) * (0.08 + fit) * time * (push[a] ?? 1) * (lean[a] ?? 1);
   }
   return normalize(out);
 }

@@ -12,7 +12,9 @@ import { buildIdleState, pickMemory, timeOfDay } from '../server/mind';
 import { initialMood, applyMessage } from '../server/mood/engine';
 import { MoteService } from '../server/service';
 import { decideIdleAction, decideIntent } from '../shared/decide';
-import { ARCHETYPES, IDLE_ACTIONS, IDLE_THOUGHTS, INTENTS, SITUATIONS, type JournalEntry } from '../shared/types';
+import { ARCHETYPES, DREAM_ENDINGS, DREAM_EVENTS, DREAM_PLACES, EMOTIONS, IDLE_ACTIONS, IDLE_THOUGHTS, INTENTS, SITUATIONS, type JournalEntry } from '../shared/types';
+import { DREAM_ENDING_LINES, DREAM_EVENT_LINES, DREAM_PLACE_LINES, WOKEN_LINES } from '../client/src/mind/dreamLines';
+import { describeEvent } from '../client/src/mind/lifeText';
 import { DEFAULT_VISUAL } from '../shared/visuals';
 import { DAY, HOUR, hostileSignals, signals, temperament } from './helpers';
 
@@ -93,7 +95,7 @@ describe('background mind: state and memory', () => {
     }
   });
 
-  it('thinks end to end with the mock provider, without changing the mood', async () => {
+  it('thinks end to end with the mock provider, nudging the mood only a little', async () => {
     const config = { ...loadConfig({ DECISION_PROVIDER: 'mock' }), dbPath: ':memory:' };
     const db = new MoteDb(':memory:');
     const catalog = new Catalog();
@@ -104,10 +106,13 @@ describe('background mind: state and memory', () => {
     const before = db.activeBlob()!.mood;
     const r = await service.think();
     expect(r.skipped).toBeNull();
+    expect(r.kind).toBe('thought');
     expect(Object.keys(r.thought!.probabilities).sort()).toEqual([...IDLE_THOUGHTS].sort());
     expect(Object.keys(r.action!.probabilities).sort()).toEqual([...IDLE_ACTIONS].sort());
+    expect(r.decision!.probabilities[r.decision!.chosen]).toBe(Math.max(...Object.values(r.decision!.probabilities)));
     expect(r.memory?.text).toContain('finished the project');
-    expect(db.activeBlob()!.mood).toEqual(before);
+    expect(Math.abs(db.activeBlob()!.mood.valence - before.valence)).toBeLessThanOrEqual(0.07);
+    expect(r.event?.kind).toBe('thought');
     db.close();
   });
 });
@@ -185,6 +190,13 @@ describe('thought lines', () => {
     expect(seen.size).toBeGreaterThanOrEqual(5);
   });
 
+  it('always pick a real line, whatever the seed', () => {
+    for (let seed = 0; seed < 3000; seed += 7) {
+      expect(lineFor(IDLE_LINES.content, 'stoic', seed * 99_991)).toEqual(expect.any(String));
+      expect(lineFor(SITUATION_LINES.win, 'curious', seed)).toEqual(expect.any(String));
+    }
+  });
+
   it('stay short enough to float', () => {
     const all = [...Object.values(SITUATION_LINES), ...Object.values(IDLE_LINES)].flatMap((l) => Object.values(l).flat());
     for (const line of all) expect(line.length, line).toBeLessThanOrEqual(32);
@@ -196,5 +208,48 @@ describe('thinking schedule', () => {
     expect(nextThinkDelay(2000, () => 0)).toBe(90_000);
     expect(nextThinkDelay(22_000, () => 0)).toBe(264_000);
     expect(nextThinkDelay(600_000, () => 1)).toBe(15 * 60_000 + 30_000);
+  });
+});
+
+describe('dream and life words', () => {
+  it('exist for every place, happening and ending, short enough to read in a dream', () => {
+    for (const k of DREAM_EVENTS) expect(DREAM_EVENT_LINES[k].length, k).toBeGreaterThan(0);
+    for (const k of DREAM_PLACES) expect(DREAM_PLACE_LINES[k].length, k).toBeGreaterThan(0);
+    for (const k of DREAM_ENDINGS) expect(DREAM_ENDING_LINES[k].length, k).toBeGreaterThan(0);
+    const all = [...Object.values(DREAM_EVENT_LINES), ...Object.values(DREAM_PLACE_LINES), ...Object.values(DREAM_ENDING_LINES), WOKEN_LINES].flat();
+    for (const line of all) expect(line.length, line).toBeLessThanOrEqual(34);
+  });
+
+  it('describe every kind of life event', () => {
+    const base = { id: 1, at: NOW };
+    const thought = Object.fromEntries(IDLE_THOUGHTS.map((k) => [k, k === 'miss_writer' ? 1 : 0])) as Record<(typeof IDLE_THOUGHTS)[number], number>;
+    const action = Object.fromEntries(IDLE_ACTIONS.map((k) => [k, k === 'wait_by_text' ? 1 : 0])) as Record<(typeof IDLE_ACTIONS)[number], number>;
+    const one = <K extends string>(keys: readonly K[], k: K) => Object.fromEntries(keys.map((x) => [x, x === k ? 1 : 0])) as Record<K, number>;
+    const t = describeEvent({ ...base, kind: 'thought', thought, confidence: 0.8, action, actionConfidence: 0.5, chosen: 'wait_by_text', memory: null, seed: 3, watched: false }, 'curious');
+    expect(t.text).toMatch(/→ wait for you$/);
+    expect(describeEvent({ ...base, kind: 'sleep', cause: 'night' }, 'stoic').text).toBe('fell asleep for the night');
+    expect(describeEvent({ ...base, kind: 'wake', cause: 'morning', sleptMs: 8 * HOUR }, 'stoic').text).toBe('woke up with the morning after 8.0 h');
+    const dream = describeEvent(
+      {
+        ...base,
+        kind: 'dream',
+        dream: {
+          place: one(DREAM_PLACES, 'sea'),
+          event: one(DREAM_EVENTS, 'flying'),
+          feeling: one(EMOTIONS, 'joy'),
+          ending: one(DREAM_ENDINGS, 'found'),
+          vividness: 0.8,
+          memories: [{ id: 2, text: 'got the job', when: NOW }],
+          fragments: [],
+          effect: 'sweet',
+          remembered: false,
+          model: 'mock',
+          seen: false,
+        },
+      },
+      'cheerful',
+    );
+    expect(dream.text).toBe('dreamed: flying in the sea (a sweet dream)');
+    expect(dream.quote).toBe('got the job');
   });
 });

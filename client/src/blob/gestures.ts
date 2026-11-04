@@ -1,9 +1,9 @@
 // One-off body gestures: short, hand-shaped animation curves layered on top of the mood-driven look.
 // Pure functions of time, so they are easy to tune and test. Every gesture returns to rest at its end.
 
-import type { Emotion } from '../../../shared/types';
+import type { DreamEvent, Emotion } from '../../../shared/types';
 
-export type GestureKind = Emotion | 'poke' | 'absorb' | 'wake' | 'pop' | 'pulse' | 'soothe' | 'puzzled';
+export type GestureKind = Emotion | 'poke' | 'absorb' | 'wake' | 'pop' | 'pulse' | 'soothe' | 'puzzled' | 'twitch';
 
 /** Additive offsets applied to the blob for one frame. */
 export interface Pose {
@@ -40,6 +40,7 @@ export const GESTURE_DURATION: Record<GestureKind, number> = {
   pulse: 1.0,
   soothe: 3.6,
   puzzled: 1.8,
+  twitch: 0.8,
 };
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -188,6 +189,15 @@ export function gesturePose(kind: GestureKind, t: number, amount = 1, shake = 1)
       const g = hold(0, 0.3, 1.1, 1.75, t);
       p.roll = 0.14 * Math.sin(t * 3.2) * g * a;
       p.z = 0.08 * g * a;
+      break;
+    }
+    case 'twitch': {
+      // Dreaming: a small shiver in its sleep.
+      const g = bump(0, 0.75, t);
+      p.x = 0.014 * Math.sin(TAU * 11 * t) * g * a * shake;
+      p.scale = 0.03 * bump(0, 0.35, t) * a;
+      p.roll = 0.04 * Math.sin(TAU * 3 * t) * g * a;
+      p.wobble = 0.18 * g * a;
       break;
     }
   }
@@ -380,6 +390,95 @@ export function behaviorFrame(kind: BehaviorKind, t: number, dur = BEHAVIOR_DURA
   // Ease in over a second, out over the last 1.5 s.
   const env = smooth(0, 1, t) * (1 - smooth(dur - 1.5, dur, t));
   scaleFrame(f, env);
+  return f;
+}
+
+/**
+ * One frame of Mote acting out a dream: `t` seconds into a beat of `dur` seconds. Eases in and out
+ * over a second like a behavior, so one dream beat can hand over to the next without a jump.
+ */
+export function dreamFrame(kind: DreamEvent, t: number, dur: number): BehaviorFrame {
+  const f: BehaviorFrame = { pose: restPose(), brightness: 0, speed: 0, grey: 0, sleepy: 0, halo: 0 };
+  if (t < 0 || t >= dur) return f;
+  const p = f.pose;
+  const u = smooth(0, dur, t); // 0 -> 1 across the beat
+  switch (kind) {
+    case 'flying':
+      p.y = 0.42 + 0.06 * Math.sin(t * 1.3);
+      p.x = 0.32 * Math.sin(t * 0.6);
+      p.roll = 0.12 * Math.sin(t * 0.6 + 1);
+      p.squash = 0.07;
+      f.speed = 0.3;
+      f.brightness = 0.1;
+      f.halo = 0.3;
+      break;
+    case 'falling':
+      p.y = 0.5 - 1.0 * u;
+      p.squash = 0.12;
+      p.pitch = 0.18 * Math.sin(t * 2);
+      p.wobble = 0.15;
+      break;
+    case 'chased':
+      p.x = 0.42 * Math.sin(t * 2.2);
+      p.yaw = -0.45 * Math.cos(t * 2.2);
+      p.scale = -0.08;
+      p.wobble = 0.1;
+      f.speed = 0.6;
+      break;
+    case 'lost':
+      p.x = 0.25 * Math.sin(t * 0.4);
+      p.y = -0.15;
+      p.scale = -0.16;
+      p.yaw = 0.6 * Math.sin(t * 0.7);
+      f.brightness = -0.12;
+      f.grey = 0.25;
+      break;
+    case 'searching':
+      p.yaw = 0.7 * Math.sin(t * 1.1);
+      p.z = 0.2;
+      p.pitch = 0.15;
+      break;
+    case 'floating':
+      p.y = 0.1 + 0.15 * Math.sin(t * 0.8);
+      p.roll = 0.15 * Math.sin(t * 0.5);
+      f.speed = -0.4;
+      break;
+    case 'held':
+      p.scale = 0.06;
+      p.pitch = 0.05;
+      f.halo = 0.6;
+      f.brightness = 0.15;
+      f.speed = -0.4;
+      break;
+    case 'reunion':
+      p.z = 0.4;
+      p.y = 0.08 * Math.abs(Math.sin(t * 4));
+      f.halo = 0.5;
+      f.brightness = 0.2;
+      break;
+    case 'storm':
+      p.x = 0.03 * Math.sin(t * 25);
+      p.spikes = 0.5;
+      p.wobble = 0.3;
+      f.brightness = 0.2 * Math.max(0, Math.sin(t * 13) * Math.sin(t * 7));
+      f.speed = 0.8;
+      break;
+    case 'melting':
+      p.squash = -0.2 * u;
+      p.y = -0.2 * u;
+      p.wobble = 0.35;
+      f.speed = -0.3;
+      break;
+    case 'growing':
+      p.scale = 0.35 * u;
+      p.y = 0.1 * u;
+      break;
+    case 'shrinking':
+      p.scale = -0.35 * u;
+      p.y = -0.1 * u;
+      break;
+  }
+  scaleFrame(f, smooth(0, 1, t) * (1 - smooth(dur - 1, dur, t)));
   return f;
 }
 

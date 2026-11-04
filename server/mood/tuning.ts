@@ -127,8 +127,120 @@ export const TUNING = {
     halfLifeMs: 3 * HOUR,
   },
 
-  /** Returning after at least this long plays the "waking up" transition. */
+  /** Returning after at least this long plays the "waking up" transition (and shows what it did). */
   wakeAfterMs: 20 * 60_000,
+
+  /** Mote's body: energy, sleep, missing the writer, restlessness. */
+  life: {
+    /** Awake, a full battery lasts about this long (faster when stirred up: x0.8 calm .. x1.2 aroused). */
+    awakeDrainMs: 22 * HOUR,
+    /** Asleep, an empty battery refills in about this long. */
+    sleepFillMs: 7 * HOUR,
+    /** Each entry costs a little energy: base + intensity * gain. */
+    entryCostBase: 0.01,
+    entryCostGain: 0.02,
+    /** Sleep pressure = (1 - energy) + time of day. It falls asleep at sleepAt and wakes below wakeBelow. */
+    sleepAt: 1,
+    wakeBelow: 0.15,
+    /** Never falls asleep within this long of the writer doing something. */
+    sleepAfterQuietMs: 20 * 60_000,
+    /** A decided-on nap turns into real sleep when the pressure is at least this. Naps last up to napMaxMs. */
+    napSleepAt: 0.7,
+    napMaxMs: 90 * 60_000,
+    maxSleepMs: 14 * HOUR,
+    /** Missing the writer: attachment (base + trust * gain) times 1 - 0.5^(away / half). */
+    attachBase: 0.35,
+    attachTrust: 0.65,
+    longingHalfMs: 8 * HOUR,
+    /** Restlessness builds to half in this long while awake (half as fast with company). */
+    boredomHalfMs: 3 * HOUR,
+    boredomSleepHalfMs: HOUR,
+    /** Writing resets most of it; wandering or looking around works some of it off. */
+    boredomAfterEntry: 0.3,
+    boredomAfterAction: 0.7,
+    /** Sleep cycles: the last part of each cycle is REM (dreaming). No dreams in the first hour. */
+    cycleMs: 90 * 60_000,
+    remFrom: 0.72,
+    firstDreamAfterMs: HOUR,
+    maxDreamsPerSleep: 2,
+    /** A sleep at least this long without a dream leaves a dream it may remember later (within forgetDreamMs). */
+    dreamMinSleepMs: 2 * HOUR,
+    forgetDreamMs: 12 * HOUR,
+    /** The page counts as watching for this long after its last visible tick. */
+    watchedMs: 3 * 60_000,
+    /** Thinking on its own while nobody watches: every min..max (slower than when watched). */
+    awayThinkMinMs: 25 * 60_000,
+    awayThinkMaxMs: 40 * 60_000,
+    /** Retry sooner when the model just wasn't loaded. */
+    awayRetryMs: 10 * 60_000,
+    /** Integration step for long gaps, and the longest gap simulated in full. */
+    stepMs: 10 * 60_000,
+    maxSimMs: 4 * DAY,
+  },
+
+  /**
+   * What a thought on its own does to the mood: the expected effect over the model's probabilities.
+   * Small on purpose, and inner life tends to heal: thoughts can ease grudges, never deepen them.
+   */
+  thoughts: {
+    effects: {
+      remember_good: { valence: 0.05, emotion: 'joy' },
+      remember_hard: { valence: -0.035, emotion: 'sadness' },
+      miss_writer: { valence: -0.01, emotion: 'sadness' },
+      wonder_day: { emotion: 'curiosity' },
+      worried: { valence: -0.025, arousal: 0.03, emotion: 'fear' },
+      grateful: { valence: 0.04, emotion: 'joy' },
+      still_hurt: { valence: -0.03, emotion: 'sadness' },
+      forgiving: { valence: 0.025, emotion: 'calm', forgive: 0.25 },
+      sleepy: { arousal: -0.04, emotion: 'calm' },
+      bored: { valence: -0.005 },
+      content: { valence: 0.02, emotion: 'calm' },
+      curious: { arousal: 0.02, emotion: 'curiosity' },
+      daydream: { emotion: 'calm' },
+    } as Record<string, { valence?: number; arousal?: number; emotion?: Emotion; forgive?: number }>,
+    /** How far one thought tints the emotions toward its feeling (times its probability). */
+    tint: 0.06,
+  },
+
+  /** What a dream does: sleeping on a hard thing helps; a nightmare leaves it jumpy for a while. */
+  dreams: {
+    processGrudge: 0.35,
+    processValence: 0.06,
+    nightmareArousal: 0.15,
+    nightmareValence: -0.05,
+    sweetValence: 0.05,
+    tint: 0.1,
+  },
+
+  /** Thought or dreamed about this many times: a core memory, which can come back long after. */
+  coreMemoryRecalls: 3,
+
+  /**
+   * Character growth (server/life/character.ts). Each step moves a trait a fraction of the way to
+   * 1 (grow) or 0 (shrink), so change is fast at first and slows near the ends. Traits drift back
+   * toward Mote's nature over weeks, so recent life matters most, but nothing is ever wiped.
+   */
+  character: {
+    driftHalfLifeMs: 45 * DAY,
+    entry: {
+      warmthKind: 0.06,
+      warmthShared: 0.02,
+      warmthHurt: 0.05,
+      warinessHurt: 0.1,
+      warinessKind: 0.03,
+      curiosity: 0.035,
+      play: 0.03,
+      playHurt: 0.04,
+      courageShared: 0.012,
+      courageFear: 0.015,
+    },
+    thought: { warmth: 0.012, curiosity: 0.012, dreaminess: 0.015, letGo: 0.03, letGoCourage: 0.012, dwell: 0.008, worry: 0.008, play: 0.005 },
+    dream: { dreaminess: 0.03, vivid: 0.03, processedCourage: 0.05, processedWariness: 0.03, nightmareCourage: 0.04, nightmareWariness: 0.02, sweetWarmth: 0.02, sweetPlay: 0.01, reunionWarmth: 0.015, flyingCourage: 0.01 },
+    /** A trait counts as part of who Mote is above this (milestones: "Grew warm"). */
+    strong: 0.65,
+    trustSteps: [0.4, 0.6, 0.8],
+    maxMemoryNodes: 160,
+  },
 } as const;
 
 export const MS = { HOUR, DAY };

@@ -1,6 +1,21 @@
 // Thin client for the local Mote server. All requests stay on this machine.
 
-import type { Emotion, IdleAction, IdleThought, InstalledModel, JournalEntry, ModelProfile, MoodState, ProviderStatus, Temperament } from '../../shared/types';
+import type {
+  AwayDigest,
+  CharacterReport,
+  Emotion,
+  IdleAction,
+  IdleThought,
+  InstalledModel,
+  JournalEntry,
+  LifeEvent,
+  LifeView,
+  ModelProfile,
+  MoodState,
+  ProviderStatus,
+  Temperament,
+  Traits,
+} from '../../shared/types';
 import type { VisualParams } from '../../shared/visuals';
 
 export interface MoodSummary {
@@ -30,6 +45,17 @@ export interface BlobInfo {
   bornAt: number;
 }
 
+export interface CharacterBrief {
+  traits: Traits;
+  description: string;
+}
+
+export interface WakeInfo {
+  cause: string;
+  sleptMs: number;
+  groggy: boolean;
+}
+
 export interface StateResponse {
   now: number;
   newborn: boolean;
@@ -37,6 +63,9 @@ export interface StateResponse {
   mood: MoodSummary;
   visual: VisualParams;
   wake: { elapsedMs: number; before: VisualParams } | null;
+  life: LifeView;
+  away: AwayDigest | null;
+  character: CharacterBrief;
   status: ProviderStatus;
   profile: ModelProfile;
   debugTools: boolean;
@@ -51,12 +80,17 @@ export interface TickResponse {
   status: ProviderStatus;
   profile: ModelProfile;
   clockOffsetMs: number;
+  life: LifeView;
+  away: AwayDigest | null;
 }
 
 export interface MessageResponse {
   entry: JournalEntry;
   visual: VisualParams;
   mood: MoodSummary;
+  life: LifeView;
+  character: CharacterBrief;
+  woke: WakeInfo | null;
   pulse: boolean;
   distress: boolean;
   wellbeing: WellbeingCard | null;
@@ -67,12 +101,28 @@ export interface MessageResponse {
   dominant: Emotion | null;
 }
 
+/** One moment of inner life (see MoteService.think). */
 export interface ThinkResponse {
+  kind: 'thought' | 'dream' | 'asleep' | 'skipped';
   thought: { probabilities: Record<IdleThought, number>; confidence: number } | null;
   action: { probabilities: Record<IdleAction, number>; confidence: number } | null;
+  decision: { probabilities: Record<IdleAction, number>; chosen: IdleAction } | null;
   memory: { id: number; text: string; when: number } | null;
+  seed: number;
+  event: LifeEvent | null;
+  fellAsleep: boolean;
+  wokeUp: boolean;
+  life: LifeView | null;
+  visual: VisualParams | null;
+  mood: MoodSummary | null;
   ms: number;
   skipped: string | null;
+}
+
+export interface WakeResponse {
+  woke: WakeInfo | null;
+  visual: VisualParams;
+  life: LifeView;
 }
 
 export interface ModelsResponse {
@@ -95,23 +145,35 @@ async function call<T>(path: string, init?: { method?: string; body?: unknown })
   return data;
 }
 
+const query = (q: Record<string, string | number | undefined>) => {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') p.set(k, String(v));
+  return p.toString();
+};
+
 export const api = {
-  state: () => call<StateResponse>('/api/state'),
-  tick: (force = false) => call<TickResponse>(`/api/tick${force ? '?force=1' : ''}`),
+  state: (idleMs = 0) => call<StateResponse>(`/api/state?${query({ idle: Math.round(idleMs) })}`),
+  /** `seen`: the page is visible (the writer is here). */
+  tick: (force = false, presence: { seen: boolean; idleMs: number } = { seen: true, idleMs: 0 }) =>
+    call<TickResponse>(`/api/tick?${query({ force: force ? 1 : undefined, seen: presence.seen ? 1 : 0, idle: Math.round(presence.idleMs) })}`),
   message: (text: string) => call<MessageResponse>('/api/message', { body: { text } }),
-  journal: (q: { area?: string; emotion?: string; before?: number; since?: number; limit?: number }) => {
-    const p = new URLSearchParams();
-    for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') p.set(k, String(v));
-    return call<{ entries: JournalEntry[] }>(`/api/journal?${p}`);
-  },
+  journal: (q: { area?: string; emotion?: string; before?: number; since?: number; limit?: number }) => call<{ entries: JournalEntry[] }>(`/api/journal?${query(q)}`),
   models: () => call<ModelsResponse>('/api/models'),
   setModel: (model: string) => call<{ status: ProviderStatus; profile: ModelProfile }>('/api/settings/model', { body: { model } }),
   fastForward: (hours: number) => call<TickResponse>('/api/debug/fast-forward', { body: { hours } }),
-  /** Background thinking; aborting the signal also cancels the model request on the server. */
+  /** Inner life; aborting the signal also cancels the model request on the server. */
   think: async (signal: AbortSignal): Promise<ThinkResponse> => {
     const res = await fetch('/api/think', { method: 'POST', signal });
     if (!res.ok) throw new Error(`think failed (${res.status})`);
     return (await res.json()) as ThinkResponse;
   },
+  wake: () => call<WakeResponse>('/api/wake', { body: {} }),
+  dreams: (q: { before?: number; limit?: number } = {}) => call<{ dreams: LifeEvent[] }>(`/api/dreams?${query(q)}`),
+  dreamSeen: (id: number) => call<{ ok: boolean }>(`/api/dreams/${id}/seen`, { body: {} }),
+  lifeLog: (q: { before?: number; limit?: number } = {}) => call<{ events: LifeEvent[] }>(`/api/life?${query(q)}`),
+  character: () => call<CharacterReport>('/api/character'),
+  setLifeBackground: (background: boolean) => call<{ background: boolean }>('/api/settings/life', { body: { background } }),
+  debugSleep: () => call<TickResponse>('/api/debug/sleep', { body: {} }),
+  debugDream: () => call<ThinkResponse>('/api/debug/dream', { body: {} }),
   rebirth: (seed?: number) => call<StateResponse>('/api/debug/rebirth', { body: { seed } }),
 };

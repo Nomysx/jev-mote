@@ -233,6 +233,68 @@ export function applySoothe(v: VisualParams): VisualParams {
   return out;
 }
 
+/** The sleeping look: still, round, low and slow-breathing. Keeps its colors, just dimmer. */
+const SLEEP_TARGET: Partial<VisualParams> = {
+  speed: 0.12,
+  amplitude: 0.08,
+  spikes: 0,
+  shrink: 0,
+  avoid: 0,
+  lean: 0,
+  bounce: 0,
+  roundness: 0.75,
+  breathe: 1,
+  sink: 0.38,
+  droop: 0.25,
+  wobble: 0.02,
+  split: 0,
+};
+
+/**
+ * The body on top of the mood: asleep (see SLEEP_TARGET), or tired (0..1: a little slower, droopier
+ * and dimmer).
+ */
+export function applyBody(v: VisualParams, body: { asleep: boolean; tired: number }): VisualParams {
+  const out = { ...v };
+  if (body.asleep) {
+    for (const [k, target] of Object.entries(SLEEP_TARGET) as [VisualKey, number][]) out[k] = lerp(v[k], target, 0.85);
+    out.saturation = v.saturation * 0.8;
+    out.brightness = v.brightness * 0.78;
+    out.closeness = v.closeness * 0.8;
+    out.haze = v.haze * 0.5;
+    return out;
+  }
+  const t = clamp(body.tired);
+  if (t > 0) {
+    out.speed = Math.max(0.08, v.speed * (1 - 0.35 * t));
+    out.amplitude = v.amplitude * (1 - 0.25 * t);
+    out.droop = Math.max(v.droop, 0.3 * t);
+    out.sink = Math.max(v.sink, 0.15 * t);
+    out.brightness = v.brightness - 0.07 * t;
+  }
+  return out;
+}
+
+/** A dream's look: its feeling as the mood (a mixed feeling splits the colors), vivid or hazy. */
+export function dreamToVisual(feeling: EmotionDist, vividness: number, temperament: Temperament, valence = 0): VisualParams {
+  const dist = normalize({ ...feeling });
+  const [[a, pa], [b, pb]] = topTwo(dist);
+  const mood: MoodState = {
+    valence: clamp(valence, -1, 1),
+    arousal: 0.45,
+    emotions: dist,
+    clarity: clamp(0.25 + 0.75 * vividness),
+    mixedness: mixednessOf(pa, pb),
+    mixPair: [a, b],
+    trust: 0.6,
+    grudges: [],
+    trustGains: [],
+    soothe: 0,
+    updatedAt: 0,
+  };
+  return moodToVisual(mood, temperament);
+}
+
 /**
  * A visual for a summary of the *user's* feelings (e.g. one day in the mood strip), drawn with
  * the blob's base hue so the strip matches its personality.

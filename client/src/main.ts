@@ -4,24 +4,32 @@ import '@fontsource/nunito/700.css';
 import './styles.css';
 
 import { decideIdleAction, decideIntent } from '../../shared/decide';
-import { EMOTIONS, type Emotion, type IdleAction, type Intent, type ProviderStatus, type Situation } from '../../shared/types';
-import { api, type BlobInfo, type MessageResponse, type MoodSummary, type StateResponse, type ThinkResponse, type TickResponse, type WellbeingCard } from './api';
+import { EMOTIONS, type AwayDigest, type Emotion, type IdleAction, type Intent, type LifeEvent, type LifeView, type ProviderStatus, type Situation } from '../../shared/types';
+import { api, type BlobInfo, type CharacterBrief, type MessageResponse, type MoodSummary, type StateResponse, type ThinkResponse, type TickResponse, type WellbeingCard } from './api';
 import { SoundEngine } from './audio/SoundEngine';
 import { voiceFromTemperament, type MoodTone } from './audio/voice';
 import { BlobView } from './blob/BlobView';
 import { Thumbnailer } from './blob/Thumbnailer';
+import { DreamTheater } from './mind/DreamTheater';
+import { GREETING_LINES, NIGHTMARE_LINES, REMEMBERED_INTRO_LINES, WOKEN_LINES } from './mind/dreamLines';
 import { loadMindPrefs, Mind, saveMindPrefs } from './mind/Mind';
 import { IDLE_ACTION_LABELS, IDLE_LINES, INTENT_LABELS, lineFor, pickFrom, PUZZLED_LINES, SITUATION_LINES, SOOTHE_LINES } from './mind/lines';
+import { SleepZ } from './mind/SleepZ';
 import { ThoughtLayer, type Candidate } from './mind/ThoughtLayer';
+import { createAwayCard } from './ui/away';
 import { createDebug } from './ui/debug';
 import { clear, h } from './ui/dom';
 import { createJournal } from './ui/journal';
+import { createMindMap } from './ui/mindmap';
 import { createSettings } from './ui/settings';
+
+type DreamEvent = LifeEvent & { kind: 'dream' };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const TICK_READY_MS = 60_000;
 const TICK_WAITING_MS = 8_000;
+const POKES_TO_WAKE = 3;
 
 const toneOf = (m: MoodSummary): MoodTone => ({ valence: m.valence, arousal: m.arousal, trust: m.trust, clarity: m.clarity });
 
@@ -37,6 +45,7 @@ const pct = (p: number) => `${Math.round(p * 100)}%`;
 const label = (k: string) => k.replace(/_/g, ' ');
 
 async function boot() {
+  const app = $('app');
   const stage = $('stage');
   const statusEl = $('status');
   const notice = $('notice');
@@ -44,6 +53,7 @@ async function boot() {
   const form = $<HTMLFormElement>('composer');
   const textarea = $<HTMLTextAreaElement>('entry');
   const send = $<HTMLButtonElement>('send');
+  const dreamOffer = $<HTMLButtonElement>('dream-offer');
 
   let initial: StateResponse;
   try {
@@ -59,21 +69,50 @@ async function boot() {
   let serverOffset = initial.now - Date.now();
   let status: ProviderStatus = initial.status;
   let clockOffset = initial.clockOffsetMs;
+  let life: LifeView = initial.life;
+  let character: CharacterBrief | null = initial.character;
   let pending = false;
   let tickTimer: number | undefined;
+  let lastInput = performance.now();
+  const idleMs = () => performance.now() - lastInput;
+  const noteInput = () => (lastInput = performance.now());
+  window.addEventListener('pointerdown', noteInput, { capture: true });
+  window.addEventListener('keydown', noteInput, { capture: true });
 
   const view = new BlobView(stage, blob.temperament.seed);
   const thumbs = new Thumbnailer();
   const sound = new SoundEngine(voiceFromTemperament(blob.temperament));
   sound.setMood(toneOf(initial.mood));
 
-  // Sounds for moments the blob itself notices: birth, being poked, an entry arriving, waking up.
+  // ---- Mote's mind: thoughts (the model's real probabilities), decisions, and its inner life ----
+  const mindPrefs = loadMindPrefs();
+  const layer = new ThoughtLayer($('mind'), () => view.getScreenAnchor());
+  layer.enabled = mindPrefs.thoughts;
+  const theater = new DreamTheater({ stage, app, view, sound, layer, temperament: () => blob.temperament });
+  const zs = new SleepZ($('mind'), () => view.getScreenAnchor());
+
+  // Pokes: awake, a squish; asleep, it stirs, and a few pokes in a row wake it up.
+  let sleepPokes: number[] = [];
   view.onEvent = (e) => {
     if (e.type === 'birth-start') sound.play('birth');
     else if (e.type === 'birth-pop') sound.play('pop');
     else if (e.type === 'absorb') sound.play('absorb');
     else if (e.type === 'wake') sound.play('wake', { delay: 0.4 });
-    else if (e.type === 'poke') sound.play('poke', { pan: e.pan * 0.6, variant: 0.9 + Math.random() * 0.22 });
+    else if (e.type === 'twitch') {
+      if (Math.random() < 0.35) sound.play('murmur', { variant: Math.random() });
+    } else if (e.type === 'poke') {
+      if (!e.asleep) {
+        sound.play('poke', { pan: e.pan * 0.6, variant: 0.9 + Math.random() * 0.22 });
+        return;
+      }
+      sound.play('murmur', { pan: e.pan * 0.5, variant: Math.random() });
+      const now = performance.now();
+      sleepPokes = [...sleepPokes.filter((t) => now - t < 6000), now];
+      if (sleepPokes.length >= POKES_TO_WAKE) {
+        sleepPokes = [];
+        void wakeUp();
+      }
+    }
   };
 
   // Sound toggle in the top bar.
@@ -86,11 +125,6 @@ async function boot() {
   sound.onChange(showSound);
   showSound();
 
-  // ---- Mote's mind: thoughts (the model's real probabilities), decisions, and background thinking ----
-  const mindPrefs = loadMindPrefs();
-  const layer = new ThoughtLayer($('mind'), () => view.getScreenAnchor());
-  layer.enabled = mindPrefs.thoughts;
-
   /** Sounds that go with a behavior Mote decided on. */
   function behaviorSound(kind: Intent | IdleAction) {
     if (kind === 'hum') sound.play('hum', { variant: Math.random() });
@@ -100,6 +134,9 @@ async function boot() {
     } else if (kind === 'sulk') sound.play('hmph', { delay: 0.3 });
     else if (kind === 'stretch') sound.play('wake', { delay: 0.2 });
   }
+
+  /** A single quiet thought (waking up, greeting, remembering a dream). */
+  const murmurThought = (text: string, confidence = 0.8) => void layer.play({ quiet: true, thoughts: [{ text, p: 1 }], confidence });
 
   /**
    * The reaction to an answered entry. Candidate thoughts surface sized by their probability, the
@@ -146,14 +183,15 @@ async function boot() {
           detail: `${pct(p)} · ${label(k)}`,
         }))
       : [];
-    // The model suggests an action; Mote weighs it against the moment and its temperament.
-    const intents = s.intent && s.situation ? top(decideIntent(s.intent, s.situation, archetype), 3, 0.04) : [];
-    const decided = intents[0]?.[0];
+    // The model suggests an action; Mote weighs it against the moment, its temperament and who it has become.
+    const decided = r.entry.decision ?? (s.intent && s.situation ? decideIntent(s.intent, s.situation, archetype) : null);
+    const intents = decided ? top(decided, 3, 0.04) : [];
+    const chosen = intents[0]?.[0];
     if (!layer.enabled || thoughts.length === 0) {
       feel();
-      if (decided) {
-        view.behave(decided);
-        behaviorSound(decided);
+      if (chosen) {
+        view.behave(chosen);
+        behaviorSound(chosen);
       }
       return;
     }
@@ -167,48 +205,168 @@ async function boot() {
         : undefined,
       onSettle: feel,
       onDecide: () => {
-        if (!decided) return;
+        if (!chosen) return;
         sound.play('decide');
-        view.behave(decided);
-        behaviorSound(decided);
+        view.behave(chosen);
+        behaviorSound(chosen);
       },
     });
   }
 
-  /** A background thought: what's on its mind (maybe one of your past entries), then what it does. */
+  /** A thought on its own: what's on its mind (maybe one of your past entries), then what it does. */
   async function muse(r: ThinkResponse) {
     if (!r.thought || !r.action) return;
     const archetype = blob.temperament.archetype;
-    const seed = Math.floor(Math.random() * 1e6);
+    const seed = r.seed || Math.floor(Math.random() * 1e6);
     const ts = top(r.thought.probabilities, 3, 0.05);
     if (ts.length === 0) return;
     const remembering = ts[0][0].startsWith('remember') && r.memory;
-    const actions = top(decideIdleAction(r.action.probabilities, r.thought.probabilities, new Date().getHours()), 3, 0.05);
-    const action = actions[0]?.[0];
+    const decision = r.decision?.probabilities ?? decideIdleAction(r.action.probabilities, r.thought.probabilities, new Date().getHours());
+    const actions = top(decision, 3, 0.05);
+    const action = r.decision?.chosen ?? actions[0]?.[0];
     await layer.play({
       quiet: true,
-      thoughts: ts.map(([k, p], i) => ({ text: lineFor(IDLE_LINES[k], archetype, seed + 131 * i), p, detail: `${pct(p)} · ${label(k)}` })),
+      thoughts: ts.map(([k, p], i) => ({ text: lineFor(IDLE_LINES[k], archetype, i === 0 ? seed : seed + 131 * i), p, detail: `${pct(p)} · ${label(k)}` })),
       confidence: r.thought.confidence,
       quote: remembering && r.memory ? (r.memory.text.length > 90 ? `${r.memory.text.slice(0, 89).trimEnd()}…` : r.memory.text) : undefined,
       decision: actions.length
         ? { options: actions.map(([k, p]) => ({ text: IDLE_ACTION_LABELS[k], p, detail: `${pct(p)} · ${label(k)}` })), confidence: r.action.confidence }
         : undefined,
-      onSettle: () => sound.play('thought', { intensity: 0.3 }),
+      onSettle: () => {
+        sound.play('thought', { intensity: 0.3 });
+        // What it thinks about moves it a little.
+        if (r.visual && !pending) view.setTarget(r.visual, { tau: 2.5, holdMs: 6000 });
+      },
       onDecide: () => {
         if (!action) return;
         view.behave(action);
         behaviorSound(action);
       },
     });
+    if (r.life) applyLife(r.life);
+  }
+
+  /** One moment of inner life, from the page's own thinking. */
+  async function live(r: ThinkResponse) {
+    if (r.kind === 'thought') return muse(r);
+    if (r.kind === 'dream') {
+      if (r.wokeUp) {
+        // A nightmare woke it.
+        view.setSleep(false);
+        view.pulse();
+        sound.play('pulse');
+        murmurThought(pickFrom(NIGHTMARE_LINES, r.seed), 0.5);
+      } else if (r.life?.asleep) {
+        // Dreaming right in front of you: a few twitches, a murmur.
+        view.gesture('twitch', 1);
+        window.setTimeout(() => view.gesture('twitch', 0.7), 900);
+        sound.play('murmur', { variant: Math.random() });
+      } else {
+        murmurThought(pickFrom(REMEMBERED_INTRO_LINES, r.seed));
+      }
+      if (r.visual && !pending) view.setTarget(r.visual, { tau: 2.5, holdMs: 6000 });
+      if (r.life) applyLife(r.life, { quiet: true });
+      return;
+    }
+    if (r.life) applyLife(r.life);
   }
 
   const mind = new Mind({
     think: (signal) => api.think(signal),
-    enabled: () => mindPrefs.background,
-    canThink: () => status.state === 'ready' && !pending && !layer.busy && !view.behaving,
-    onThought: (r) => muse(r),
+    enabled: () => life.background,
+    canThink: () => status.state === 'ready' && !pending && !layer.busy && !view.behaving && !theater.playing,
+    onThought: (r) => live(r),
   });
   mind.start();
+
+  // ---- Sleep, waking up, dreams ----
+  let snoreTimer: number | undefined;
+  function applyLife(l: LifeView, opts: { quiet?: boolean } = {}) {
+    const was = life;
+    life = l;
+    view.setSleep(l.asleep, l.dreaming);
+    zs.set(l.asleep && !theater.playing);
+    document.body.classList.toggle('mote-asleep', l.asleep);
+    textarea.placeholder = l.asleep ? 'Mote is asleep… writing will wake it' : 'Write to Mote…';
+    window.clearInterval(snoreTimer);
+    if (l.asleep) snoreTimer = window.setInterval(() => document.visibilityState === 'visible' && !theater.playing && sound.play('snore'), 19_000);
+    if (!opts.quiet && was) {
+      if (!was.asleep && l.asleep) {
+        // Fell asleep while you watched.
+        view.behave('nap', 8);
+        sound.play('snore', { delay: 1.2 });
+      } else if (was.asleep && !l.asleep && !pending) {
+        // Woke up by itself (morning, or rested).
+        view.wake(view.getCurrent(), view.getTarget());
+        murmurThought(pickFrom(WOKEN_LINES, Math.floor(Math.random() * 1e6)));
+      }
+    }
+    dreamOffer.hidden = !(l.unseenDream && !l.asleep && !theater.playing);
+  }
+
+  async function wakeUp() {
+    try {
+      const r = await api.wake();
+      if (r.woke) {
+        view.wake(view.getCurrent(), r.visual);
+        murmurThought(pickFrom(WOKEN_LINES, Math.floor(Math.random() * 1e6)), r.woke.groggy ? 0.3 : 0.8);
+      }
+      applyLife(r.life, { quiet: true });
+    } catch {
+      /* offline: it just keeps sleeping */
+    }
+  }
+
+  async function watchDream(ev: DreamEvent) {
+    journal.toggle(false);
+    growth.toggle(false);
+    settings.toggle(false);
+    away.hide();
+    dreamOffer.hidden = true;
+    zs.set(false);
+    mind.notifyActivity();
+    await theater.play(ev);
+    if (!ev.dream.seen) await api.dreamSeen(ev.id).catch(() => undefined);
+    void tick(false);
+  }
+
+  dreamOffer.addEventListener('click', async () => {
+    const id = life.unseenDream?.id;
+    const d = (await api.dreams({ limit: 5 })).dreams.find((e) => e.id === id) ?? (await api.dreams({ limit: 1 })).dreams[0];
+    if (d?.kind === 'dream') void watchDream(d);
+  });
+
+  /** How it greets you when you come back. */
+  function greet(d: AwayDigest) {
+    const seed = Math.floor(Math.random() * 1e6);
+    const archetype = blob.temperament.archetype;
+    window.setTimeout(() => {
+      if (pending || theater.playing || life.asleep) return;
+      if (d.greeting === 'joyful') {
+        view.react('joy', { intensity: 0.4 + 0.5 * d.longing });
+        sound.play('joy', { intensity: 0.5 });
+        view.behave('come_closer', 9);
+        murmurThought(lineFor(SITUATION_LINES.greeting, archetype, seed));
+      } else if (d.greeting === 'warm') {
+        view.gesture('curiosity', 0.5);
+        murmurThought(lineFor(SITUATION_LINES.greeting, archetype, seed));
+      } else if (d.greeting === 'sulky') {
+        view.behave('sulk', 7);
+        sound.play('hmph', { delay: 0.3 });
+        murmurThought(pickFrom(GREETING_LINES.sulky!, seed), 0.5);
+      } else if (d.greeting === 'sleepy') {
+        view.gesture('wake', 0.7);
+        sound.play('wake');
+        murmurThought(pickFrom(GREETING_LINES.sleepy!, seed), 0.5);
+      }
+    }, 2400);
+  }
+
+  function welcomeBack(d: AwayDigest | null) {
+    if (!d) return;
+    if (wellbeingEl.hidden) away.show(d);
+    greet(d);
+  }
 
   // Tint the page glow with the blob's color (throttled).
   let lastGlow = 0;
@@ -256,6 +414,8 @@ async function boot() {
     if (!pending) view.setTarget(t.visual);
     sound.setMood(toneOf(t.mood));
     applyStatus(t.status);
+    if (t.life) applyLife(t.life);
+    welcomeBack(t.away);
     debug.showMood(t.mood, clockOffset);
     // Only after time jumps (debug fast-forward): a periodic refresh would reset the journal's scroll.
     if (refreshJournal) journal.refresh();
@@ -263,14 +423,20 @@ async function boot() {
 
   async function tick(force: boolean) {
     try {
-      onTick(await api.tick(force || status.state !== 'ready'));
+      onTick(await api.tick(force || status.state !== 'ready', { seen: document.visibilityState === 'visible', idleMs: idleMs() }));
     } catch {
       applyStatus({ ...status, state: 'error', message: 'Lost connection to the Mote server.', command: undefined, checkedAt: Date.now() });
     }
   }
 
+  // Coming back to the tab: catch up at once (and see what it did meanwhile).
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void tick(false);
+  });
+
   // ---- Wellbeing card ----
   function showWellbeing(card: WellbeingCard) {
+    away.hide();
     clear(wellbeingEl);
     wellbeingEl.append(
       h('button', { class: 'close-btn', type: 'button', 'aria-label': 'Close', onclick: () => (wellbeingEl.hidden = true) }, '×'),
@@ -293,7 +459,14 @@ async function boot() {
   }
 
   // ---- Panels ----
-  const journal = createJournal($('journal'), { thumbs, temperament: () => blob.temperament, serverNow: () => Date.now() + serverOffset });
+  const away = createAwayCard($('away'), { archetype: () => blob.temperament.archetype, onWatch: (ev) => void watchDream(ev) });
+  const journal = createJournal($('journal'), {
+    thumbs,
+    temperament: () => blob.temperament,
+    serverNow: () => Date.now() + serverOffset,
+    onWatchDream: (ev) => void watchDream(ev),
+  });
+  const growth = createMindMap($('growth'), { hue: () => view.getCurrent().hueA, serverNow: () => Date.now() + serverOffset });
   const settings = createSettings($('settings'), {
     blob: () => blob,
     wellbeing: () => wellbeing,
@@ -308,6 +481,19 @@ async function boot() {
         if (!mindPrefs.thoughts) layer.cancel();
       },
     },
+    life: {
+      get: () => life,
+      character: () => character,
+      setBackground: async (on) => {
+        await api.setLifeBackground(on);
+        life = { ...life, background: on };
+        if (!on) mind.notifyActivity();
+      },
+      openGrowth: () => {
+        settings.toggle(false);
+        growth.toggle(true);
+      },
+    },
   });
   const debug = createDebug($('debug'), {
     view,
@@ -317,6 +503,7 @@ async function boot() {
     onTick: (t) => onTick(t, true),
     onRebirth: (s) => {
       blob = s.blob;
+      character = s.character;
       sound.setVoice(voiceFromTemperament(s.blob.temperament));
       sound.setMood(toneOf(s.mood));
       view.setTarget(s.visual, { immediate: true });
@@ -324,16 +511,33 @@ async function boot() {
       onTick(s, true);
       void settings.refresh();
     },
+    dreamNow: async () => {
+      showNotice('Mote is dreaming…');
+      const r = await api.debugDream().catch((err: Error) => ({ skipped: err.message, event: null }) as unknown as ThinkResponse);
+      if (r.event?.kind === 'dream') {
+        showNotice(null);
+        if (r.life) applyLife(r.life, { quiet: true });
+        await watchDream(r.event);
+      } else showNotice(`Couldn’t dream: ${r.skipped ?? 'no answer'}`);
+    },
+    wakeNow: () => void wakeUp(),
+    replayDream: async () => {
+      const d = (await api.dreams({ limit: 1 })).dreams[0];
+      if (d?.kind === 'dream') void watchDream(d);
+      else showNotice('No dreams yet. Try “dream now”.');
+    },
   });
   $('btn-journal').addEventListener('click', () => journal.toggle());
   $('btn-settings').addEventListener('click', () => settings.toggle());
+  $('btn-growth').addEventListener('click', () => growth.toggle());
   const debugBtn = $('btn-debug');
   debugBtn.hidden = !initial.debugTools;
   debugBtn.addEventListener('click', () => debug.toggle());
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && !theater.playing) {
       journal.toggle(false);
       settings.toggle(false);
+      growth.toggle(false);
     }
   });
 
@@ -344,8 +548,10 @@ async function boot() {
   };
   textarea.addEventListener('input', () => {
     autosize();
-    view.notifyTyping();
+    if (theater.playing) theater.stop();
+    if (!life.asleep) view.notifyTyping();
     mind.notifyActivity();
+    away.hide();
   });
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -363,6 +569,7 @@ async function boot() {
     showNotice(null);
     mind.notifyActivity();
     layer.cancel();
+    away.hide();
     // The entry flows from the text box into the blob as light; it listens while the model reads.
     const box = textarea.getBoundingClientRect();
     const arrived = view.absorb(box.left + box.width / 2, box.top + box.height / 2);
@@ -372,6 +579,13 @@ async function boot() {
       textarea.value = '';
       autosize();
       await arrived;
+      if (r.woke) {
+        // You woke it up: a stretch first.
+        view.gesture('wake', r.woke.groggy ? 0.7 : 1);
+        sound.play('wake');
+      }
+      character = r.character;
+      applyLife(r.life, { quiet: true });
       view.setTarget(r.visual);
       if (r.distress && r.wellbeing) showWellbeing(r.wellbeing);
       void react(r);
@@ -389,15 +603,19 @@ async function boot() {
     }
   });
 
-  // ---- First frame: birth, waking up, or straight to the current look ----
+  // ---- First frame: birth, asleep, waking up, or straight to the current look ----
   if (initial.newborn) {
     view.setTarget(initial.visual, { immediate: true });
     void view.playBirth();
+  } else if (initial.life.asleep) {
+    view.setTarget(initial.visual, { immediate: true });
   } else if (initial.wake) {
     view.wake(initial.wake.before, initial.visual);
   } else {
     view.setTarget(initial.visual, { immediate: true });
   }
+  applyLife(initial.life, { quiet: true });
+  welcomeBack(initial.away);
   applyStatus(initial.status);
   debug.showMood(initial.mood, initial.clockOffsetMs);
   if (new URLSearchParams(location.search).has('debug') && initial.debugTools) debug.toggle(true);

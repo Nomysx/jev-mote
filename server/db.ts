@@ -3,15 +3,25 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { Emotion, JournalEntry, LifeArea, MoodState, Signals, Temperament } from '../shared/types';
+import type { Emotion, JournalEntry, LifeArea, LifeEvent, LifeEventData, LifeState, MoodState, Signals, Temperament } from '../shared/types';
 import type { VisualParams } from '../shared/visuals';
 
 export interface BlobRow {
   id: number;
   temperament: Temperament;
   mood: MoodState;
+  /** Null for blobs saved before Mote had a body clock. */
+  life: LifeState | null;
   bornAt: number;
   lastSeenAt: number;
+}
+
+export interface EventFilter {
+  kinds?: LifeEvent['kind'][];
+  since?: number;
+  until?: number;
+  before?: number;
+  limit?: number;
 }
 
 export interface NewEntry {
@@ -32,6 +42,8 @@ export interface NewEntry {
 }
 
 export interface EntryFilter {
+  /** Only this blob's entries (memories belong to the Mote that read them). */
+  blobId?: number;
   lifeArea?: string;
   emotion?: string;
   before?: number;
@@ -52,6 +64,8 @@ interface EntryRecord {
   user_emotion: string | null;
   distress: number;
   skipped: string | null;
+  recalls?: number;
+  meta?: string | null;
 }
 
 const parse = <T>(s: string | null): T | null => (s ? (JSON.parse(s) as T) : null);
@@ -70,6 +84,8 @@ function toEntry(r: EntryRecord): JournalEntry {
     userEmotion: r.user_emotion as Emotion | 'none' | null,
     distress: r.distress === 1,
     skipped: r.skipped,
+    recalls: r.recalls ?? 0,
+    decision: parse<{ decision?: JournalEntry['decision'] }>(r.meta ?? null)?.decision,
   };
 }
 
@@ -118,26 +134,136 @@ export class MoteDb {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      -- Mote's inner life: thoughts on its own, falling asleep, waking up, dreams.
+      CREATE TABLE IF NOT EXISTS life_events (
+        id INTEGER PRIMARY KEY,
+        blob_id INTEGER NOT NULL REFERENCES blobs(id),
+        at INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        data TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS life_events_blob_time ON life_events(blob_id, at);
     `);
+    // Columns added after the first release.
+    const has = (table: string, col: string) => (this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === col);
+    if (!has('blobs', 'life')) this.db.exec('ALTER TABLE blobs ADD COLUMN life TEXT');
+    if (!has('entries', 'recalls')) this.db.exec('ALTER TABLE entries ADD COLUMN recalls INTEGER NOT NULL DEFAULT 0');
+    if (!has('entries', 'last_recalled_at')) this.db.exec('ALTER TABLE entries ADD COLUMN last_recalled_at INTEGER');
   }
 
   activeBlob(): BlobRow | null {
     const r = this.db
-      .prepare('SELECT id, temperament, mood, born_at, last_seen_at FROM blobs WHERE retired_at IS NULL ORDER BY id DESC LIMIT 1')
-      .get() as { id: number; temperament: string; mood: string; born_at: number; last_seen_at: number } | undefined;
+      .prepare('SELECT id, temperament, mood, life, born_at, last_seen_at FROM blobs WHERE retired_at IS NULL ORDER BY id DESC LIMIT 1')
+      .get() as { id: number; temperament: string; mood: string; life: string | null; born_at: number; last_seen_at: number } | undefined;
     if (!r) return null;
-    return { id: r.id, temperament: JSON.parse(r.temperament), mood: JSON.parse(r.mood), bornAt: r.born_at, lastSeenAt: r.last_seen_at };
+    return { id: r.id, temperament: JSON.parse(r.temperament), mood: JSON.parse(r.mood), life: parse<LifeState>(r.life), bornAt: r.born_at, lastSeenAt: r.last_seen_at };
   }
 
-  createBlob(t: Temperament, mood: MoodState, now: number): BlobRow {
+  createBlob(t: Temperament, mood: MoodState, now: number, life: LifeState | null = null): BlobRow {
     const info = this.db
-      .prepare('INSERT INTO blobs (seed, temperament, born_at, mood, last_seen_at) VALUES (?, ?, ?, ?, ?)')
-      .run(t.seed, JSON.stringify(t), now, JSON.stringify(mood), now);
-    return { id: Number(info.lastInsertRowid), temperament: t, mood, bornAt: now, lastSeenAt: now };
+      .prepare('INSERT INTO blobs (seed, temperament, born_at, mood, life, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(t.seed, JSON.stringify(t), now, JSON.stringify(mood), life ? JSON.stringify(life) : null, now);
+    return { id: Number(info.lastInsertRowid), temperament: t, mood, life, bornAt: now, lastSeenAt: now };
   }
 
   saveMood(blobId: number, mood: MoodState, lastSeenAt: number) {
     this.db.prepare('UPDATE blobs SET mood = ?, last_seen_at = ? WHERE id = ?').run(JSON.stringify(mood), lastSeenAt, blobId);
+  }
+
+  /** Saves mood and body. `lastSeenAt` only when the writer was actually there (the page visible). */
+  saveBlobState(blobId: number, mood: MoodState, life: LifeState, lastSeenAt?: number) {
+    if (lastSeenAt === undefined) {
+      this.db.prepare('UPDATE blobs SET mood = ?, life = ? WHERE id = ?').run(JSON.stringify(mood), JSON.stringify(life), blobId);
+    } else {
+      this.db.prepare('UPDATE blobs SET mood = ?, life = ?, last_seen_at = ? WHERE id = ?').run(JSON.stringify(mood), JSON.stringify(life), lastSeenAt, blobId);
+    }
+  }
+
+  // ---- Inner life ----
+
+  insertEvent(blobId: number, at: number, data: LifeEventData): LifeEvent {
+    const info = this.db.prepare('INSERT INTO life_events (blob_id, at, kind, data) VALUES (?, ?, ?, ?)').run(blobId, at, data.kind, JSON.stringify(data));
+    return { ...data, id: Number(info.lastInsertRowid), at };
+  }
+
+  event(id: number): (LifeEvent & { blobId: number }) | null {
+    const r = this.db.prepare('SELECT id, blob_id, at, data FROM life_events WHERE id = ?').get(id) as { id: number; blob_id: number; at: number; data: string } | undefined;
+    return r ? { ...(JSON.parse(r.data) as LifeEventData), id: r.id, at: r.at, blobId: r.blob_id } : null;
+  }
+
+  updateEvent(id: number, data: LifeEventData) {
+    this.db.prepare('UPDATE life_events SET data = ? WHERE id = ?').run(JSON.stringify(data), id);
+  }
+
+  /** Newest first. */
+  listEvents(blobId: number, f: EventFilter = {}): LifeEvent[] {
+    const where = ['blob_id = ?'];
+    const args: (string | number)[] = [blobId];
+    if (f.kinds?.length) {
+      where.push(`kind IN (${f.kinds.map(() => '?').join(', ')})`);
+      args.push(...f.kinds);
+    }
+    if (f.since !== undefined) {
+      where.push('at >= ?');
+      args.push(f.since);
+    }
+    if (f.until !== undefined) {
+      where.push('at <= ?');
+      args.push(f.until);
+    }
+    if (f.before !== undefined) {
+      where.push('at < ?');
+      args.push(f.before);
+    }
+    const limit = Math.min(Math.max(f.limit ?? 50, 1), 500);
+    const rows = this.db
+      .prepare(`SELECT id, at, data FROM life_events WHERE ${where.join(' AND ')} ORDER BY at DESC, id DESC LIMIT ${limit}`)
+      .all(...args) as { id: number; at: number; data: string }[];
+    return rows.map((r) => ({ ...(JSON.parse(r.data) as LifeEventData), id: r.id, at: r.at }));
+  }
+
+  /** Mote thought or dreamed about these entries. */
+  markRecalled(ids: number[], now: number) {
+    const stmt = this.db.prepare('UPDATE entries SET recalls = recalls + 1, last_recalled_at = ? WHERE id = ?');
+    for (const id of new Set(ids)) stmt.run(now, id);
+  }
+
+  /** Everything the character replay needs about this blob's entries, oldest first. */
+  characterEntries(blobId: number) {
+    const rows = this.db
+      .prepare('SELECT id, created_at, text, signals, distress, mood_after, recalls, user_emotion FROM entries WHERE blob_id = ? ORDER BY created_at ASC, id ASC')
+      .all(blobId) as { id: number; created_at: number; text: string; signals: string | null; distress: number; mood_after: string | null; recalls: number; user_emotion: string | null }[];
+    return rows.map((r) => ({
+      id: r.id,
+      createdAt: r.created_at,
+      text: r.text,
+      signals: parse<Signals>(r.signals),
+      distress: r.distress === 1,
+      trustAfter: parse<MoodState>(r.mood_after)?.trust ?? null,
+      recalls: r.recalls ?? 0,
+      userEmotion: r.user_emotion as Emotion | 'none' | null,
+    }));
+  }
+
+  /** The whole inner-life log, oldest first. */
+  allEvents(blobId: number): LifeEvent[] {
+    const rows = this.db.prepare('SELECT id, at, data FROM life_events WHERE blob_id = ? ORDER BY at ASC, id ASC').all(blobId) as { id: number; at: number; data: string }[];
+    return rows.map((r) => ({ ...(JSON.parse(r.data) as LifeEventData), id: r.id, at: r.at }));
+  }
+
+  /** Changes whenever an entry or a life event is added (cache key). */
+  historyVersion(blobId: number): string {
+    const e = this.db.prepare('SELECT MAX(id) AS m, COUNT(*) AS n FROM entries WHERE blob_id = ?').get(blobId) as { m: number | null; n: number };
+    const l = this.db.prepare('SELECT MAX(id) AS m FROM life_events WHERE blob_id = ?').get(blobId) as { m: number | null };
+    const r = this.db.prepare('SELECT COALESCE(SUM(recalls), 0) AS s FROM entries WHERE blob_id = ?').get(blobId) as { s: number };
+    return `${e.m ?? 0}:${e.n}:${l.m ?? 0}:${r.s}`;
+  }
+
+  /** Entries recalled at least `minRecalls` times (core memories), any age. */
+  coreMemories(blobId: number, minRecalls: number, limit = 40): JournalEntry[] {
+    return (
+      this.db.prepare('SELECT * FROM entries WHERE blob_id = ? AND recalls >= ? ORDER BY recalls DESC, created_at DESC LIMIT ?').all(blobId, minRecalls, limit) as EntryRecord[]
+    ).map(toEntry);
   }
 
   retireBlob(blobId: number, now: number) {
@@ -177,6 +303,10 @@ export class MoteDb {
   listEntries(f: EntryFilter = {}): JournalEntry[] {
     const where: string[] = [];
     const args: (string | number)[] = [];
+    if (f.blobId !== undefined) {
+      where.push('blob_id = ?');
+      args.push(f.blobId);
+    }
     if (f.lifeArea) {
       where.push('life_area = ?');
       args.push(f.lifeArea);

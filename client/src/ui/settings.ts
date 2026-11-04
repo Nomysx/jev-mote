@@ -1,7 +1,7 @@
 // Settings: model presets, installed-model picker (live switching), the blob's temperament, about.
 
-import type { ProviderStatus } from '../../../shared/types';
-import { api, type BlobInfo, type ModelsResponse, type WellbeingCard } from '../api';
+import type { LifeView, ProviderStatus } from '../../../shared/types';
+import { api, type BlobInfo, type CharacterBrief, type ModelsResponse, type WellbeingCard } from '../api';
 import type { SoundEngine } from '../audio/SoundEngine';
 import type { MindPrefs } from '../mind/Mind';
 import { clear, formatBytes, h } from './dom';
@@ -12,6 +12,13 @@ export interface SettingsDeps {
   onStatus: (s: ProviderStatus) => void;
   sound: SoundEngine;
   mind: { get: () => MindPrefs; set: (p: Partial<MindPrefs>) => void };
+  /** Mote's body and character right now, and whether it lives on its own (a server setting). */
+  life: {
+    get: () => LifeView | null;
+    character: () => CharacterBrief | null;
+    setBackground: (on: boolean) => Promise<void>;
+    openGrowth: () => void;
+  };
 }
 
 const canonical = (n: string) => (n.includes(':') ? n.toLowerCase() : `${n.toLowerCase()}:latest`);
@@ -138,37 +145,60 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
     const t = b.temperament;
     const trait = (label: string, v: number) =>
       h('div', { class: 'trait' }, h('span', { class: 'muted' }, label), h('div', { class: 'bar' }, h('span', { style: `width:${Math.round(v * 100)}%` })), h('span', { class: 'faint' }, v.toFixed(2)));
+    const life = deps.life.get();
+    const character = deps.life.character();
     return [
       h('h3', {}, 'Your Mote'),
       h('p', {}, h('b', {}, b.archetype), ' · ', b.description),
+      character
+        ? h(
+            'p',
+            {},
+            'Who it is becoming: ',
+            h('b', {}, character.description),
+            ' ',
+            h('button', { class: 'link-btn', type: 'button', onclick: () => deps.life.openGrowth() }, 'see how it grew'),
+          )
+        : null,
+      life ? h('p', { class: 'muted' }, `Right now: ${life.words}.`) : null,
+      life ? trait('Energy', life.energy) : null,
+      life ? trait('Missing you', life.longing) : null,
+      life ? trait('Restless', life.boredom) : null,
       h('p', { class: 'faint' }, `Born ${new Date(b.bornAt).toLocaleString()} · seed `, h('code', {}, String(b.seed))),
+      h('h3', {}, 'Temperament (its nature, from birth)'),
       trait('Baseline mood', t.baselineValence),
       trait('Volatility', t.volatility),
       trait('Trust speed', t.trustSpeed),
       trait('Recovery speed', t.recoverySpeed),
       trait('Grudge memory', t.grudgeMemory),
       trait('Lumpiness', t.lumpiness),
-      h('p', { class: 'faint' }, 'Temperament is random and permanent. Two blobs with the same seed have the same temperament.'),
+      h('p', { class: 'faint' }, 'Temperament is random and permanent. Two blobs with the same seed have the same temperament. Its character grows from there, through how you treat it, what it thinks about and what it dreams.'),
     ];
   }
 
   function mindSection() {
     const prefs = deps.mind.get();
+    const life = deps.life.get();
     const box = (id: string, checked: boolean, text: string, onChange: (on: boolean) => void) =>
       h(
         'label',
-        { class: 'row', for: id, style: 'margin:4px 0' },
-        h('input', { type: 'checkbox', id, checked, onchange: (e: Event) => onChange((e.target as HTMLInputElement).checked) }),
-        text,
+        { class: 'row', for: id, style: 'margin:4px 0; flex-wrap:nowrap; align-items:flex-start' },
+        h('input', { type: 'checkbox', id, checked, style: 'margin-top:4px', onchange: (e: Event) => onChange((e.target as HTMLInputElement).checked) }),
+        h('span', { style: 'flex:1; min-width:0' }, text),
       );
     return [
       h('h3', {}, "Mote's mind"),
       box('mind-thoughts', prefs.thoughts, 'Show its thoughts and decisions', (on) => deps.mind.set({ thoughts: on })),
-      box('mind-bg', prefs.background, 'Let it think on its own while you’re away', (on) => deps.mind.set({ background: on })),
+      box('mind-bg', life?.background ?? true, 'Let it live on its own: think, sleep and dream, even while this page is closed', (on) => void deps.life.setBackground(on)),
       h(
         'p',
         { class: 'faint' },
-        'The thoughts are the decision model’s real choices: each floating thought is a possible answer, sized by its probability. The words are written in advance, and the model only picks. Thinking on its own asks your model every few minutes while you’re idle (less often with slow models) and stops as soon as you type. Turn thoughts off for the wordless Mote.',
+        'The thoughts are the decision model’s real choices: each floating thought is a possible answer, sized by its probability. The words are written in advance, and the model only picks. Turn thoughts off for the wordless Mote.',
+      ),
+      h(
+        'p',
+        { class: 'faint' },
+        'Mote has a body clock: it gets tired, sleeps at night, dreams about what you wrote, wakes in the morning and misses you when you’re gone (it never gets worse for it, it’s just glad when you’re back). Its life runs in the Mote server, so it goes on while the page is closed, as long as the server runs. On its own it asks your model every 25 to 40 minutes while nobody is watching (every few minutes while you watch), dreams at most twice a night, and only while your model is already loaded: it never loads one by itself. Turned off, it still sleeps and wakes, but doesn’t think or dream.',
       ),
     ];
   }

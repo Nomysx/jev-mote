@@ -344,7 +344,7 @@ export const PUZZLED_LINES = [
 function pickIndex(n: number, seed: number): number {
   let x = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
   x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35) >>> 0;
-  return (x ^ (x >>> 16)) % n;
+  return ((x ^ (x >>> 16)) >>> 0) % n; // unsigned: a negative index would pick no line at all
 }
 
 /** One line for a thought: usually the general set, sometimes the archetype's own voice. */
