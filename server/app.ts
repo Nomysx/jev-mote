@@ -48,6 +48,9 @@ export function createApp(service: MoteService, config: AppConfig): Hono {
     });
   });
 
+  // Background thinking. Cancelled (and the model request with it) if the browser drops the request.
+  app.post('/api/think', async (c) => c.json(await service.think(c.req.raw.signal)));
+
   app.get('/api/models', async (c) => c.json(await service.models()));
   app.post('/api/settings/model', async (c) => {
     const b = await body(c);

@@ -2,7 +2,7 @@
 
 A fully local emotional journaling companion. The only things on screen are a soft, clay-like 3D form (your Mote) and a text box. You write journal entries. Mote never writes back. It reacts only by changing shape, color, movement and stability, based on what a local **decision model** detects in your writing.
 
-> Mote is an expressive simulation, not a being with feelings. It turns typed answers from a local model into visuals.
+> Mote is an expressive simulation, not a being with feelings. It turns typed answers from a local model into visuals, sound, and short thoughts written in advance (the model only chooses among them).
 
 - **Temperament at birth.** Each Mote gets a random, permanent personality (an archetype plus seeded jitter).
 - **Memory and mood.** It remembers recent history, warms up slowly, holds grudges, and drifts back to its baseline over time, even while the app is closed.
@@ -152,7 +152,7 @@ entry ─► state builder ─► DecisionModel.ask(state, questions) ─► par
 
 The app talks to one interface, `DecisionProvider` (`server/decision/types.ts`), which uses the Jev / Ollama `/v1/systemone` wire format directly: a `state` (string or JSON) and 1 to 64 named `questions` of type `choice`, `noul` or `score`. Answers come back with `probabilities` and `confidence`. `confidence` measures how concentrated the probabilities are, not the chance of being right; Mote uses it for visual stability, never for trusting an answer.
 
-Every entry asks, in a single request: `user_emotion`, `user_valence`, `user_intensity`, `life_area`, `tone_toward_blob`, `blob_reaction`, `trust_change`, `surprising` and `distress_flag` (see `server/decision/questions.ts`). Choice questions where nothing may fit have a `none` / `other` option. Arithmetic, dates and counting stay in code.
+Every entry asks, in a single request: `user_emotion`, `user_valence`, `user_intensity`, `life_area`, `tone_toward_blob`, `blob_reaction`, `trust_change`, `surprising`, `distress_flag`, and for Mote's mind `situation` (what kind of moment this is) and `blob_intent` (what it wants to do) (see `server/decision/questions.ts`). Choice questions where nothing may fit have a `none` / `other` option. Arithmetic, dates and counting stay in code.
 
 Yes/no questions can be asked either as `noul` or as a two-option `choice` with neutral keys (`a` / `b`), per question, in [`server/decision/questionConfig.json`](server/decision/questionConfig.json). Both default to `choice`: in testing, nimble answered the `noul` form of `surprising` with about 0.9 for every entry, while the choice form separated ordinary entries from sharp changes on tev1, tev1:0.8b and nimble.
 
@@ -232,6 +232,18 @@ More moments:
 
 Each entry stores the text, timestamp, the full model answers (with provider and model), the derived signals, and a snapshot of the visual parameters. The journal view shows a timeline with a thumbnail of each snapshot (rendered with the same shader), a weekly mood strip (one blob per day from your average feelings that day), and filters by life area and emotion.
 
+### Mote's mind: thoughts, decisions and thinking on its own
+
+Decision models don't write text: they score a fixed set of options. Mote shows that process as its mind.
+
+- **Thoughts are the model's real probabilities.** After an entry, candidate thoughts float up around Mote, each sized by the probability the model gave that kind of moment (one of 20: a win, a loss, an insult, an apology, a hello, worry, self-criticism...). They drift and compete; the strongest settles on top while Mote reacts. When the model is torn, the rivals stay close and blurred, and nothing fully settles.
+- **The words are written in advance.** Each kind of moment has a few short lines, many in each archetype's own voice (an anxious Mote thinks "did i do something?" where a stoic one thinks "noted."). The model only picks; the line is chosen by the entry's id, so the journal shows the same thought later.
+- **Then it decides what to do.** A small ring of actions appears (come closer, comfort, celebrate, give space, hide, listen, play, rest) and one is chosen and acted out. The final choice weighs the model's suggestion against what fits the moment and Mote's temperament (`shared/decide.ts`). In testing, small models sometimes suggested odd actions, such as "play" after an insult; this keeps decisions sensible, and an anxious Mote hides where a stoic one listens.
+- **It thinks on its own.** While you're idle, Mote asks the model what's on its mind every few minutes (less often with slow models), for example a memory of one of your entries, missing you, getting sleepy, or still being hurt. Then it does something: naps, hums, wanders, sulks, waits by the text box or glows. The state it judges contains its mood, temperament, grudges, the time of day, how long you've been away, and maybe one past entry chosen in code: recent, strong ones are likelier, and entries that raised a distress flag are never resurfaced. Background thinking never changes the mood, pauses when the window is hidden, and is cancelled (with the model request) the moment you start typing. It only runs while your model is already loaded (from your last entry), so it never loads a model by itself, and it never keeps a model in memory longer than `OLLAMA_KEEP_ALIVE` would.
+- **Your choice.** In Settings → Mote's mind, turn thoughts off for the original wordless Mote, or turn off thinking on its own.
+
+Tested on real models: tev1:0.8b read all eight test moments correctly (win, insult, grief, hello, goodnight, apology, worry, self-criticism; 78 to 100%) and Laya six of eight. Background thoughts made sense on tev1:0.8b too ("still hurt" late at night after an insult, "missing you" after two days away).
+
 ### Wellbeing safeguard
 
 If `distress_flag` comes back with reasonable probability (threshold in `tuning.ts`), Mote turns soft and calm, and a small, dismissible card shows helpline information as plain text (works offline). Defaults: 988 in the US, findahelpline.com internationally. Edit [`server/wellbeing.json`](server/wellbeing.json) for your region. The model can be wrong; this is a gentle nudge, not a diagnosis, and it never blocks you.
@@ -247,6 +259,7 @@ With `MOTE_DEBUG=true`, a **Debug** button appears (or open the app with `?debug
 - **Rebirth** with an optional seed: compare two blobs (the seed is shown in Settings).
 - A live readout of the mood engine (emotions, trust, grudges).
 - **Reaction previews**: play any gesture and sound (each emotion, mixed, unsure, surprise, entry arriving, soothe, puzzled, wake, birth) without a model and without changing the mood.
+- **Mind previews**: a clear and an undecided thought cloud, every behavior (nap, hum, sulk, wander...), and "think now" to trigger a background thought immediately.
 
 ## Adding a new provider
 
@@ -290,6 +303,7 @@ export default factory;
 ## Privacy and offline use
 
 - No cloud APIs, analytics, telemetry or CDN assets. Three.js and the Nunito font are installed from npm and bundled, and all sounds are synthesized in the browser (no audio files).
+- Background thinking only talks to the same local model, and only while the page is open and visible.
 - The server binds to `127.0.0.1` and only calls `OLLAMA_URL`, which must be local. Cloud models are refused by tag (`:cloud`, `-cloud`) and by the remote host Ollama reports for them.
 - After `npm install` (and pulling a model), the app works with the network disconnected.
 

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { hueDelta } from '../../../shared/math';
 import type { Emotion } from '../../../shared/types';
 import { DEFAULT_VISUAL, HUE_KEYS, VISUAL_KEYS, type VisualParams } from '../../../shared/visuals';
-import { GestureRig, type GestureKind } from './gestures';
+import { BEHAVIOR_DURATION, behaviorFrame, GestureRig, scaleFrame, type BehaviorKind, type GestureKind } from './gestures';
 import { applyVisual, createBlobGeometry, createBlobMaterial } from './material';
 import { mistFragmentShader, mistVertexShader, RIPPLE_COUNT } from './shaders';
 
@@ -140,6 +140,8 @@ export class BlobView {
   private last = performance.now();
   private running = true;
   private tmpQuat = new THREE.Quaternion();
+  private behavior: { kind: BehaviorKind; start: number; dur: number; release: number | null } | null = null;
+  private haloBoost = 0;
 
   /** Called every frame with the current (eased) visual, e.g. to tint the page background. */
   onFrame: ((v: VisualParams) => void) | null = null;
@@ -379,6 +381,32 @@ export class BlobView {
     this.rig.play(kind, this.time, amount);
   }
 
+  /** A sustained action Mote decided on: come closer, hide, nap, wander... Replaces the current one. */
+  behave(kind: BehaviorKind, seconds = BEHAVIOR_DURATION[kind]) {
+    this.cancelBehavior();
+    this.behavior = { kind, start: this.time, dur: seconds, release: null };
+    if (kind === 'stretch') this.rig.play('wake', this.time, 0.8);
+  }
+
+  /** Eases the current behavior out over about a second (e.g. when a new entry arrives). */
+  cancelBehavior() {
+    if (this.behavior && this.behavior.release === null) this.behavior.release = this.time;
+  }
+
+  get behaving(): BehaviorKind | null {
+    return this.behavior && this.behavior.release === null ? this.behavior.kind : null;
+  }
+
+  /** Where the blob is on screen (center and radius in CSS px), for thoughts to float around it. */
+  getScreenAnchor(): { x: number; y: number; r: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    const c = this.mesh.position.clone().project(this.camera);
+    const e = this.mesh.position.clone().add(new THREE.Vector3(this.mesh.scale.x, 0, 0)).project(this.camera);
+    const x = rect.left + (c.x * 0.5 + 0.5) * rect.width;
+    const y = rect.top + (-c.y * 0.5 + 0.5) * rect.height;
+    return { x, y, r: Math.abs(rect.left + (e.x * 0.5 + 0.5) * rect.width - x) };
+  }
+
   /** The user is typing: the blob attends to the text box, with a tiny ripple now and then. */
   notifyTyping() {
     this.lastTyping = this.time;
@@ -510,7 +538,23 @@ export class BlobView {
     this.attention += (typing - this.attention) * (1 - Math.exp(-dt / 0.45));
 
     const pose = this.rig.pose(this.time);
+    // A decided-on behavior layers its own pose and look on top (eased in, out, or released).
+    let sleepy = 0;
+    this.haloBoost = 0;
     const base = { ...this.current, dim: Math.max(this.current.dim, this.dimValue) };
+    if (this.behavior) {
+      const b = this.behavior;
+      const bf = behaviorFrame(b.kind, this.time - b.start, b.dur);
+      if (b.release !== null) scaleFrame(bf, 1 - smooth(b.release, b.release + 1.1, this.time));
+      if (this.time - b.start >= b.dur || (b.release !== null && this.time - b.release > 1.1)) this.behavior = null;
+      for (const key of Object.keys(pose) as (keyof typeof pose)[]) pose[key] += bf.pose[key];
+      base.brightness = Math.max(0, base.brightness + bf.brightness - 0.22 * bf.sleepy);
+      base.speed = Math.max(0.05, base.speed * (1 + bf.speed) * (1 - 0.6 * bf.sleepy));
+      base.amplitude *= 1 - 0.5 * bf.sleepy;
+      base.grey = clamp01(base.grey + bf.grey);
+      sleepy = bf.sleepy;
+      this.haloBoost = bf.halo;
+    }
     const v: VisualParams = { ...base, spikes: clamp01(base.spikes + pose.spikes), wobble: clamp01(base.wobble + pose.wobble) };
     const still = 1 - 0.93 * v.dim;
     const motion = this.reduceMotion ? 0.4 : 1;
@@ -539,7 +583,7 @@ export class BlobView {
 
     // 4. Body: trust -> size and closeness; sadness sinks; joy bounces; fear trembles and avoids
     //    the cursor; gestures layered on top; a gentle look-around when idle.
-    const breath = 1 + (0.018 + 0.03 * v.breathe) * Math.sin(this.breathPhase) * (1 - 0.7 * v.dim);
+    const breath = 1 + (0.018 + 0.03 * v.breathe + 0.02 * sleepy) * Math.sin(this.breathPhase) * (1 - 0.7 * v.dim);
     const bounce = Math.abs(Math.sin(this.bouncePhase)) * 0.2 * v.bounce * still * motion;
     const squash = 0.07 * v.bounce * Math.cos(this.bouncePhase * 2) * still * motion + pose.squash;
     const s = v.scale * breath * (1 + this.pulseValue * 0.09) * (0.55 + 0.45 * smooth(0.45, 1, birth)) * (1 + pose.scale);
@@ -694,7 +738,7 @@ export class BlobView {
     this.halo.position.set(this.mesh.position.x, this.mesh.position.y, this.mesh.position.z - 0.9);
     this.halo.scale.setScalar(3.6 * s);
     hm.color.setHSL(v.hueA, Math.min(1, v.saturation + 0.1), this.dark ? 0.6 : 0.65);
-    hm.opacity = (0.16 + 0.22 * Math.max(0, v.brightness - 0.85) + 0.15 * this.listen + 0.35 * this.pulseValue) * (1 - 0.7 * v.dim) * formed * (this.dark ? 1 : 0.55);
+    hm.opacity = (0.16 + 0.22 * Math.max(0, v.brightness - 0.85) + 0.15 * this.listen + 0.35 * this.pulseValue + 0.3 * this.haloBoost) * (1 - 0.7 * v.dim) * formed * (this.dark ? 1 : 0.55);
 
     // How far the blob has risen above its resting height (0): the shadow fades and spreads.
     const height = Math.max(0, this.mesh.position.y);

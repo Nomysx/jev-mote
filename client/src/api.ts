@@ -1,6 +1,6 @@
 // Thin client for the local Mote server. All requests stay on this machine.
 
-import type { Emotion, InstalledModel, JournalEntry, ModelProfile, MoodState, ProviderStatus, Temperament } from '../../shared/types';
+import type { Emotion, IdleAction, IdleThought, InstalledModel, JournalEntry, ModelProfile, MoodState, ProviderStatus, Temperament } from '../../shared/types';
 import type { VisualParams } from '../../shared/visuals';
 
 export interface MoodSummary {
@@ -67,6 +67,14 @@ export interface MessageResponse {
   dominant: Emotion | null;
 }
 
+export interface ThinkResponse {
+  thought: { probabilities: Record<IdleThought, number>; confidence: number } | null;
+  action: { probabilities: Record<IdleAction, number>; confidence: number } | null;
+  memory: { id: number; text: string; when: number } | null;
+  ms: number;
+  skipped: string | null;
+}
+
 export interface ModelsResponse {
   current: string;
   provider: string;
@@ -99,5 +107,11 @@ export const api = {
   models: () => call<ModelsResponse>('/api/models'),
   setModel: (model: string) => call<{ status: ProviderStatus; profile: ModelProfile }>('/api/settings/model', { body: { model } }),
   fastForward: (hours: number) => call<TickResponse>('/api/debug/fast-forward', { body: { hours } }),
+  /** Background thinking; aborting the signal also cancels the model request on the server. */
+  think: async (signal: AbortSignal): Promise<ThinkResponse> => {
+    const res = await fetch('/api/think', { method: 'POST', signal });
+    if (!res.ok) throw new Error(`think failed (${res.status})`);
+    return (await res.json()) as ThinkResponse;
+  },
   rebirth: (seed?: number) => call<StateResponse>('/api/debug/rebirth', { body: { seed } }),
 };

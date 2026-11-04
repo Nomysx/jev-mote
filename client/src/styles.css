@@ -14,6 +14,8 @@
   --ok: #8fd1a8;
   --radius: 18px;
   --shadow: 0 10px 40px rgb(0 0 0 / 0.35);
+  --thought: #f7f2fb;
+  --thought-glow: rgb(200 170 255 / 0.55);
   color-scheme: dark;
 }
 
@@ -31,6 +33,8 @@
     --accent: #c9784a;
     --accent-text: #fff8f2;
     --shadow: 0 10px 40px rgb(60 40 80 / 0.15);
+    --thought: #2b2533;
+    --thought-glow: rgb(255 255 255 / 0.95);
     color-scheme: light;
   }
 }
@@ -583,6 +587,94 @@ select {
   display: none !important;
 }
 
+/* Mote's mind: floating thoughts and decisions */
+.mind-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 3;
+}
+
+.mind-thought,
+.mind-choice,
+.mind-quote {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  pointer-events: auto;
+  user-select: none;
+  will-change: transform, opacity;
+  font-weight: 600;
+  color: var(--thought);
+  text-shadow:
+    0 0 14px var(--thought-glow),
+    0 1px 2px rgb(0 0 0 / 0.2);
+}
+
+.mind-thought {
+  font-size: 17px;
+  letter-spacing: 0.01em;
+}
+
+.mind-thought.won {
+  font-weight: 700;
+  text-shadow:
+    0 0 20px var(--thought-glow),
+    0 0 5px var(--thought-glow);
+}
+
+.mind-thought.quiet {
+  font-size: 15px;
+}
+
+.mind-choice {
+  font-size: 13px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: blur(6px);
+  color: var(--text-dim);
+  text-shadow: none;
+}
+
+.mind-choice.quiet {
+  font-size: 12px;
+}
+
+.mind-choice.chosen {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.mind-quote {
+  font-size: 13px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text-dim);
+  max-width: min(320px, 80vw);
+  white-space: normal;
+  text-align: center;
+  text-shadow: none;
+}
+
+.chip.thought {
+  font-style: italic;
+  color: var(--text);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 @media (max-width: 420px) {
   .brand {
     display: none;
@@ -615,5 +707,11 @@ input[type='range'] {
   }
   .trait {
     grid-template-columns: 110px 1fr 34px;
+  }
+  .mind-thought {
+    font-size: 15px;
+  }
+  .mind-choice {
+    font-size: 12px;
   }
 }

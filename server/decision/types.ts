@@ -87,8 +87,17 @@ export const LIMITS = {
 export interface DecisionModel {
   readonly providerId: string;
   readonly model: string;
-  /** Ask 1-64 typed questions about one state. Resolves with validated answers in the wire format. */
-  ask(state: SystemOneState, questions: Questions, opts?: { signal?: AbortSignal }): Promise<SystemOneResponse>;
+  /**
+   * Ask 1-64 typed questions about one state. Resolves with validated answers in the wire format.
+   * `background`: a low-priority request (Mote thinking on its own). Providers that load models may
+   * refuse it ('not_loaded') rather than load one, and should not extend how long a model stays loaded.
+   */
+  ask(state: SystemOneState, questions: Questions, opts?: AskOptions): Promise<SystemOneResponse>;
+}
+
+export interface AskOptions {
+  signal?: AbortSignal;
+  background?: boolean;
 }
 
 export interface DecisionProvider extends DecisionModel {
@@ -126,6 +135,8 @@ export type DecisionErrorCode =
   | 'too_large'
   | 'timeout'
   | 'out_of_memory'
+  | 'aborted'
+  | 'not_loaded'
   | 'bad_response'
   | 'http_error';
 

@@ -11,7 +11,7 @@ import type { InstalledModel, ModelProfile, ProviderStatus } from '../../../shar
 import { checkLocalUrl } from '../../config';
 import { canonicalName, isCloudName } from '../catalog';
 import { askSystemOne, httpJson } from '../systemoneHttp';
-import { DecisionError, type DecisionProvider, type ProviderContext, type ProviderFactory, type Questions, type SystemOneState } from '../types';
+import { DecisionError, type AskOptions, type DecisionProvider, type ProviderContext, type ProviderFactory, type Questions, type SystemOneState } from '../types';
 import { compareVersions, maxVersion } from '../version';
 
 const API_MINIMUM = '0.35.0';
@@ -154,15 +154,16 @@ class OllamaProvider implements DecisionProvider {
     });
   }
 
-  async ask(state: SystemOneState, questions: Questions, opts: { signal?: AbortSignal } = {}) {
+  async ask(state: SystemOneState, questions: Questions, opts: AskOptions = {}) {
     const st = await this.status();
     if (st.state !== 'ready') {
       throw new DecisionError(st.state === 'error' || st.state === 'checking' ? 'http_error' : st.state, st.message);
     }
+    const keepAlive = opts.background ? await this.backgroundKeepAlive() : this.ctx.config.keepAlive;
     try {
       return await askSystemOne(
         this.base,
-        { model: this.model, state, questions, keep_alive: this.ctx.config.keepAlive },
+        { model: this.model, state, questions, keep_alive: keepAlive },
         questions,
         { timeoutMs: this.ctx.config.decisionTimeoutMs, signal: opts.signal },
       );
@@ -170,6 +171,27 @@ class OllamaProvider implements DecisionProvider {
       this.cached = null; // re-check on the next call
       throw err;
     }
+  }
+
+  /**
+   * Background thinking never loads a model and never keeps one loaded longer than it would have
+   * been: it only runs while the model is already in memory, and passes on the time it has left.
+   */
+  private async backgroundKeepAlive(): Promise<number> {
+    let models: { name?: string; model?: string; expires_at?: string }[] = [];
+    try {
+      const r = await httpJson(`${this.base}/api/ps`, { timeoutMs: CHECK_TIMEOUT_MS });
+      models = (r.json as { models?: typeof models })?.models ?? [];
+    } catch {
+      throw new DecisionError('not_loaded', 'Could not check whether the model is loaded.');
+    }
+    const wanted = canonicalName(this.model);
+    const m = models.find((x) => canonicalName(x.name ?? '') === wanted || canonicalName(x.model ?? '') === wanted);
+    if (!m) throw new DecisionError('not_loaded', `"${this.model}" isn't loaded, so Mote won't load it just to think.`);
+    const left = m.expires_at ? Date.parse(m.expires_at) - Date.now() : NaN;
+    if (!Number.isFinite(left)) return -1;
+    if (left > 365 * 24 * 3_600_000) return -1; // loaded "forever" (OLLAMA_KEEP_ALIVE=-1)
+    return Math.max(1, Math.round(left / 1000));
   }
 
   async setModel(model: string): Promise<ProviderStatus> {

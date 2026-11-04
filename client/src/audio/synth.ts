@@ -6,7 +6,7 @@ import { clamp } from '../../../shared/math';
 import type { Emotion } from '../../../shared/types';
 import { moodPitch, moodTempo, type MoodTone, type Voice } from './voice';
 
-export type SoundKind = Emotion | 'pulse' | 'absorb' | 'poke' | 'birth' | 'pop' | 'wake' | 'soothe' | 'puzzled';
+export type SoundKind = Emotion | 'pulse' | 'absorb' | 'poke' | 'birth' | 'pop' | 'wake' | 'soothe' | 'puzzled' | 'thought' | 'decide' | 'hum' | 'snore' | 'hmph';
 
 export const SOUND_KINDS: SoundKind[] = [
   'joy',
@@ -24,6 +24,11 @@ export const SOUND_KINDS: SoundKind[] = [
   'wake',
   'soothe',
   'puzzled',
+  'thought',
+  'decide',
+  'hum',
+  'snore',
+  'hmph',
 ];
 
 export interface SoundOptions {
@@ -623,7 +628,68 @@ const RECIPES: Record<SoundKind, Recipe> = {
     });
     return 0.95 * v.K;
   },
+
+  /** Thoughts surfacing: a soft, glassy shimmer. */
+  thought(c: Ctx, v: V) {
+    [1, 1.25, 1.5].forEach((r, i) => {
+      tone(c, { at: i * 0.09, dur: 0.05, freq: [[0, v.P * 3 * r]], gain: 0.03 * v.g, attack: 0.004, release: 0.3, pan: (i - 1) * 0.4 });
+    });
+    return 0.7;
+  },
+
+  /** A decision clicking into place: two soft notes, a fourth apart. */
+  decide(c: Ctx, v: V) {
+    tone(c, { at: 0, dur: 0.06, freq: [[0, v.P * 1.5]], type: 'triangle', gain: 0.09 * v.g, attack: 0.004, release: 0.12 });
+    tone(c, { at: 0.09, dur: 0.12, freq: [[0, v.P * 2]], type: 'triangle', gain: 0.11 * v.g, attack: 0.004, release: 0.35, fm: { ratio: v.fm.ratio, index: v.fm.index * 0.3 } });
+    noise(c, { at: 0, dur: 0.02, gain: 0.03 * v.g, filter: { type: 'highpass', freq: 3000 }, attack: 0.001, release: 0.02 });
+    return 0.7;
+  },
+
+  /** Humming to itself: a short pentatonic tune in its own voice (varies each time). */
+  hum(c: Ctx, v: V, o: SoundOptions) {
+    const scale = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3, 2];
+    let seed = Math.floor((o.variant ?? Math.random()) * 1e6) || 1;
+    const next = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    let at = 0;
+    let idx = 2;
+    for (let i = 0; i < 6; i++) {
+      idx = Math.max(0, Math.min(scale.length - 1, idx + Math.round((next() - 0.5) * 3)));
+      const len = (i === 5 ? 0.42 : 0.2 + next() * 0.12) * v.K;
+      tone(c, { at, dur: len, freq: [[0, v.P * 0.75 * scale[idx]]], type: v.wave, gain: 0.07 * v.g, attack: 0.04, release: 0.18, vibrato: { rate: v.vib.rate, depth: v.vib.depth * 0.5 }, filter: { type: 'lowpass', freq: 1600 * v.B } });
+      at += len * 0.92;
+    }
+    return at + 0.5;
+  },
+
+  /** Dozing: one slow breath in and out, with a low hum. */
+  snore(c: Ctx, v: V) {
+    noise(c, { at: 0, dur: 1.1, gain: 0.03 * v.g, filter: { type: 'lowpass', freq: 500, to: 750 }, attack: 0.5, release: 0.3 });
+    noise(c, { at: 1.2, dur: 1.3, gain: 0.025 * v.g, filter: { type: 'lowpass', freq: 450, to: 300 }, attack: 0.2, release: 0.5 });
+    tone(c, { at: 1.25, dur: 1.1, freq: [[0, v.P * 0.3]], gain: 0.04 * v.g, attack: 0.3, release: 0.5 });
+    return 3;
+  },
+
+  /** Sulking: a little "hmph". */
+  hmph(c: Ctx, v: V) {
+    noise(c, { at: 0, dur: 0.12, gain: 0.05 * v.g, filter: { type: 'bandpass', freq: 900, q: 1 }, attack: 0.005, release: 0.06 });
+    tone(c, {
+      at: 0.03,
+      dur: 0.2,
+      freq: [
+        [0, v.P * 0.9],
+        [0.18, v.P * 0.7],
+      ],
+      type: 'sawtooth',
+      gain: 0.08 * v.g,
+      attack: 0.01,
+      release: 0.08,
+      filter: { type: 'lowpass', freq: 900 * v.B },
+    });
+    return 0.5;
+  },
 };
+
+
 
 const EMOTION_KINDS = new Set<SoundKind>(['joy', 'sadness', 'anger', 'fear', 'calm', 'curiosity', 'disgust']);
 

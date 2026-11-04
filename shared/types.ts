@@ -16,6 +16,57 @@ export type TrustChange = (typeof TRUST_CHANGES)[number];
 export const ARCHETYPES = ['anxious', 'cheerful', 'moody', 'stoic', 'curious'] as const;
 export type Archetype = (typeof ARCHETYPES)[number];
 
+/** What kind of moment an entry is (asked of the model, shown as Mote's thoughts). */
+export const SITUATIONS = [
+  'greeting',
+  'goodnight',
+  'win',
+  'good_news',
+  'gratitude',
+  'kindness',
+  'apology',
+  'insult',
+  'loss',
+  'loneliness',
+  'conflict',
+  'worry',
+  'stress',
+  'tired',
+  'self_criticism',
+  'confusion',
+  'change',
+  'question',
+  'ordinary',
+  'none',
+] as const;
+export type Situation = (typeof SITUATIONS)[number];
+
+/** What Mote decides to do after reading an entry. */
+export const INTENTS = ['come_closer', 'comfort', 'celebrate', 'give_space', 'hide', 'listen', 'play', 'rest'] as const;
+export type Intent = (typeof INTENTS)[number];
+
+/** What is on Mote's mind while nobody is writing (background thinking). */
+export const IDLE_THOUGHTS = [
+  'remember_good',
+  'remember_hard',
+  'miss_writer',
+  'wonder_day',
+  'worried',
+  'grateful',
+  'still_hurt',
+  'forgiving',
+  'sleepy',
+  'bored',
+  'content',
+  'curious',
+  'daydream',
+] as const;
+export type IdleThought = (typeof IDLE_THOUGHTS)[number];
+
+/** What Mote does on its own while it waits. */
+export const IDLE_ACTIONS = ['nap', 'look_around', 'wait_by_text', 'wander', 'stretch', 'hum', 'sulk', 'glow'] as const;
+export type IdleAction = (typeof IDLE_ACTIONS)[number];
+
 /** Permanent personality, generated once at birth from a seed. All traits are 0..1. */
 export interface Temperament {
   seed: number;
@@ -80,6 +131,12 @@ export interface Signals {
   surprising: number;
   /** Probability (0..1) that the writer expresses self-harm thoughts or crisis. */
   distress: number;
+  /** What kind of moment this was. Missing on entries saved before thoughts existed. */
+  situation?: Record<Situation, number>;
+  situationConfidence?: number;
+  /** What Mote decided to do. Missing on older entries. */
+  intent?: Record<Intent, number>;
+  intentConfidence?: number;
   /** Answers that were missing or malformed and replaced with neutral defaults. */
   warnings: string[];
 }

@@ -123,5 +123,93 @@ export function buildQuestions(config: QuestionConfig = DEFAULT_QUESTION_CONFIG)
     },
     surprising: yesNo('surprising', config.surprising.askAs),
     distress_flag: yesNo('distress_flag', config.distress_flag.askAs),
+    // Mote's mind: what kind of moment this is (shown as its thoughts) and what it decides to do.
+    situation: {
+      type: 'choice',
+      instructions: 'What kind of moment does new_message describe?',
+      criteria: SITUATION_CRITERIA,
+    },
+    blob_intent: {
+      type: 'choice',
+      instructions: 'After reading new_message, what would the creature most want to do?',
+      criteria: {
+        come_closer: 'Move closer to the writer',
+        comfort: 'Stay near and be gently comforting',
+        celebrate: 'Celebrate and bounce around',
+        give_space: 'Back away and give the writer some space',
+        hide: 'Hide and shrink away',
+        listen: 'Stay still and listen quietly',
+        play: 'Play and be silly',
+        rest: 'Rest or sleep',
+      },
+    },
+  };
+}
+
+export const SITUATION_CRITERIA: Record<string, string> = {
+  greeting: 'Saying hello or checking in with the creature',
+  goodnight: 'Saying goodnight, going to sleep, or leaving for now',
+  win: 'A success, an achievement, or finishing something hard',
+  good_news: 'Good news or a happy event',
+  gratitude: 'Thanks or appreciation',
+  kindness: 'Affection or kindness toward the creature',
+  apology: 'An apology',
+  insult: 'An insult or attack on the creature',
+  loss: 'Losing someone or something, or grief',
+  loneliness: 'Feeling alone, left out or disconnected',
+  conflict: 'A fight, argument or tension with someone',
+  worry: 'Worry or fear about what might happen',
+  stress: 'Overwhelm, pressure or too much to do',
+  tired: 'Exhaustion, illness or low energy',
+  self_criticism: 'Being hard on oneself',
+  confusion: 'Not knowing what to do or think',
+  change: 'A big change, a beginning or an ending',
+  question: 'A question asked to the creature',
+  ordinary: 'An ordinary moment or a routine day',
+  none: 'None of these',
+};
+
+/**
+ * Background thinking: asked while nobody is writing. The state describes the creature (mood,
+ * temperament, grudges), the time of day, how long since the last entry, and maybe one remembered
+ * entry. Memory options are only offered when there is a memory.
+ */
+export function buildIdleQuestions(hasMemory: boolean): Questions {
+  const memory: Record<string, string> = hasMemory
+    ? { remember_good: 'Thinking back on the happy moment in memory', remember_hard: 'Still thinking about the hard moment in memory' }
+    : {};
+  return {
+    idle_thought: {
+      type: 'choice',
+      instructions: 'Right now, with no new message, what is the small creature most likely thinking about?',
+      criteria: {
+        ...memory,
+        miss_writer: 'Missing the writer and wishing they would come back',
+        wonder_day: "Wondering how the writer's day is going",
+        worried: 'Worrying about the writer',
+        grateful: 'Glad the writer is in its life',
+        still_hurt: 'Still hurt by how it was treated',
+        forgiving: 'Letting go of an old hurt',
+        sleepy: 'Getting sleepy',
+        bored: 'Feeling a little bored',
+        content: 'Calm and content, nothing in particular',
+        curious: 'Curious about something new',
+        daydream: 'Daydreaming',
+      },
+    },
+    idle_action: {
+      type: 'choice',
+      instructions: 'What does the creature do next while it waits?',
+      criteria: {
+        nap: 'Take a nap',
+        look_around: 'Look around',
+        wait_by_text: 'Wait close to where the writer types',
+        wander: 'Drift around a little',
+        stretch: 'Stretch',
+        hum: 'Hum a little tune',
+        sulk: 'Turn away and sulk',
+        glow: 'Glow warmly',
+      },
+    },
   };
 }

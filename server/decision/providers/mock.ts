@@ -26,11 +26,34 @@ const HOSTILE = /\b(you|mote|blob)\b[^.!?]{0,25}\b(stupid|useless|dumb|idiot|suc
 const KIND = /\b(thank(s| you)|love you|good (blob|mote)|you'?re (sweet|cute|lovely|great|the best|kind)|(hi|hello|hey|good morning|good night) (mote|blob|little one|friend))\b/;
 const DISMISSIVE = /\b(whatever|don'?t care|who cares|ignore you|not talking to you|go away|boring|you wouldn'?t understand)\b/;
 
+/** Cues for the kind of moment an entry is (the "situation" question). */
+const MOMENTS: Record<string, RegExp> = {
+  greeting: /\b(hi|hello|hey|good morning)\b/,
+  goodnight: /\b(good ?night|night night|going to (bed|sleep)|bedtime)\b/,
+  win: /\b(did it|finished|passed|got the (job|promotion)|promotion|won|nailed it)\b/,
+  good_news: /\b(good news|great news|engaged|accepted|birthday)\b/,
+  gratitude: /\b(thank(s| you)|grateful|appreciate)\b/,
+  apology: /\b(sorry|apologi[sz]e)\b/,
+  loss: /\b(died|passed away|funeral|lost (my|our)|miss (my|him|her|them))\b/,
+  loneliness: /\b(lonely|alone|nobody|no one|left out)\b/,
+  conflict: /\b(fight|fought|argued|argument|yelled)\b/,
+  worry: /\b(worried|anxious|nervous|scared|afraid|what if)\b/,
+  stress: /\b(stressed|overwhelmed|deadline|too much|so busy|pressure)\b/,
+  tired: /\b(tired|exhausted|sick|no energy)\b/,
+  self_criticism: /\b(i'?m (so )?(stupid|useless|a failure)|my fault|hate myself|i failed)\b/,
+  confusion: /\b(don'?t know|not sure|unsure|confused)\b/,
+  change: /\b(moving|new job|quit|broke up|breakup|graduat\w*)\b/,
+  question: /\?\s*$|\b(do you|are you|can you)\b/,
+};
+
 function count(text: string, re: RegExp): number {
   return (text.match(re) ?? []).length;
 }
 
 export interface Cues {
+  /** The lowercased text the cues were read from (for background thinking: the state). */
+  text: string;
+  moments: Set<string>;
   scores: Record<string, number>;
   crisis: boolean;
   hostile: boolean;
@@ -51,7 +74,8 @@ export function readCues(text: string): Cues {
   const kind = KIND.test(t);
   const dismissive = DISMISSIVE.test(t);
   if (hostile) scores.anger = Math.max(scores.anger, 0.6);
-  return { scores, crisis: CRISIS.test(t), hostile, kind, dismissive, total };
+  const moments = new Set(Object.keys(MOMENTS).filter((k) => MOMENTS[k].test(t)));
+  return { text: t, moments, scores, crisis: CRISIS.test(t), hostile, kind, dismissive, total };
 }
 
 function messageOf(state: SystemOneState): string {
@@ -77,8 +101,48 @@ function choiceBias(name: string, key: string, c: Cues): number {
     if (c.kind) return { joy: 3, calm: 1.5 }[key] ?? 0;
     if (c.crisis) return { calm: 2, sadness: 1.5 }[key] ?? 0;
   }
+  if (name === 'situation') {
+    if (key === 'insult') return c.hostile ? 5 : 0;
+    if (key === 'kindness') return c.kind ? 3 : 0;
+    if (key === 'ordinary') return c.moments.size === 0 && !c.hostile && !c.kind ? 2.5 : 0;
+    if (key === 'none') return 0.1;
+    return c.moments.has(key) ? 4 : 0;
+  }
+  if (name === 'blob_intent') return (intentBias(c)[key] ?? 0) * 1;
+  if (name === 'idle_thought') return idleThoughtBias(c)[key] ?? 0;
+  if (name === 'idle_action') return idleActionBias(c)[key] ?? 0;
   if (key === 'none' || key === 'other') return c.total === 0 ? 1.5 : 0;
   return (c.scores[key] ?? 0) * 4;
+}
+
+function intentBias(c: Cues): Record<string, number> {
+  const m = c.moments;
+  if (c.hostile) return { give_space: 3, hide: 2.5 };
+  if (m.has('win') || m.has('good_news')) return { celebrate: 4, play: 1.5 };
+  if (m.has('loss') || m.has('loneliness') || c.crisis) return { comfort: 4, come_closer: 2 };
+  if (m.has('goodnight') || m.has('tired')) return { rest: 4 };
+  if (c.kind || m.has('greeting')) return { come_closer: 3, play: 2 };
+  if (m.has('worry') || m.has('stress')) return { listen: 3, comfort: 2 };
+  return { listen: 2.5 };
+}
+
+/** Background thinking reads the state itself: mood words, time of day, a memory. */
+function idleThoughtBias(c: Cues): Record<string, number> {
+  const t = c.text;
+  const b: Record<string, number> = {};
+  if (/night/.test(t)) b.sleepy = 3;
+  if (/hurt|grudge/.test(t)) Object.assign(b, { still_hurt: 3, forgiving: 1 });
+  if (/happy|calm/.test(t)) Object.assign(b, { content: 1.5, grateful: 1.5 });
+  if (/"memory"/.test(t)) Object.assign(b, { remember_good: 2, remember_hard: 1.2 });
+  if (/days? ago/.test(t)) b.miss_writer = 2.5;
+  return b;
+}
+
+function idleActionBias(c: Cues): Record<string, number> {
+  const t = c.text;
+  if (/night/.test(t)) return { nap: 3 };
+  if (/hurt|grudge/.test(t)) return { sulk: 2.5 };
+  return { look_around: 1, hum: 1, glow: 1, wander: 1, wait_by_text: 1 };
 }
 
 function yesProbability(name: string, c: Cues): number {

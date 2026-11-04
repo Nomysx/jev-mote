@@ -3,6 +3,7 @@
 import type { ProviderStatus } from '../../../shared/types';
 import { api, type BlobInfo, type ModelsResponse, type WellbeingCard } from '../api';
 import type { SoundEngine } from '../audio/SoundEngine';
+import type { MindPrefs } from '../mind/Mind';
 import { clear, formatBytes, h } from './dom';
 
 export interface SettingsDeps {
@@ -10,6 +11,7 @@ export interface SettingsDeps {
   wellbeing: () => WellbeingCard;
   onStatus: (s: ProviderStatus) => void;
   sound: SoundEngine;
+  mind: { get: () => MindPrefs; set: (p: Partial<MindPrefs>) => void };
 }
 
 const canonical = (n: string) => (n.includes(':') ? n.toLowerCase() : `${n.toLowerCase()}:latest`);
@@ -150,6 +152,27 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
     ];
   }
 
+  function mindSection() {
+    const prefs = deps.mind.get();
+    const box = (id: string, checked: boolean, text: string, onChange: (on: boolean) => void) =>
+      h(
+        'label',
+        { class: 'row', for: id, style: 'margin:4px 0' },
+        h('input', { type: 'checkbox', id, checked, onchange: (e: Event) => onChange((e.target as HTMLInputElement).checked) }),
+        text,
+      );
+    return [
+      h('h3', {}, "Mote's mind"),
+      box('mind-thoughts', prefs.thoughts, 'Show its thoughts and decisions', (on) => deps.mind.set({ thoughts: on })),
+      box('mind-bg', prefs.background, 'Let it think on its own while you’re away', (on) => deps.mind.set({ background: on })),
+      h(
+        'p',
+        { class: 'faint' },
+        'The thoughts are the decision model’s real choices: each floating thought is a possible answer, sized by its probability. The words are written in advance, and the model only picks. Thinking on its own asks your model every few minutes while you’re idle (less often with slow models) and stops as soon as you type. Turn thoughts off for the wordless Mote.',
+      ),
+    ];
+  }
+
   function soundSection() {
     const snd = deps.sound;
     const toggle = h('input', {
@@ -187,7 +210,7 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
       h(
         'p',
         { class: 'muted' },
-        'Mote is an expressive simulation, not a being with feelings. It never writes back: a local decision model answers a few fixed questions about each entry, and Mote turns those answers into shape, color and movement.',
+        'Mote is an expressive simulation, not a being with feelings. It never writes back: a local decision model answers a few fixed questions about each entry, and Mote turns those answers into shape, color, movement, sound and (if you like) short thoughts. Its thoughts are lines written in advance; the model only chooses which fits.',
       ),
       h(
         'p',
@@ -204,7 +227,7 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
     clear(body);
     if (note) body.append(h('p', { class: 'muted' }, note));
     if (m) body.append(h('div', {}, modelSection(m)));
-    body.append(h('div', {}, blobSection()), h('div', {}, soundSection()), h('div', {}, aboutSection()));
+    body.append(h('div', {}, blobSection()), h('div', {}, mindSection()), h('div', {}, soundSection()), h('div', {}, aboutSection()));
   }
 
   async function load() {

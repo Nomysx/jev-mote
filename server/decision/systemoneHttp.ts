@@ -25,6 +25,7 @@ export async function httpJson(
       signal,
     });
   } catch (err) {
+    if (init.signal?.aborted) throw new DecisionError('aborted', 'The request was cancelled.');
     if (timeout.aborted) throw new DecisionError('timeout', `No answer from ${new URL(url).host} within ${Math.round(init.timeoutMs / 1000)} s.`);
     throw new DecisionError('offline', `Could not reach ${new URL(url).host}: ${(err as Error).message}`);
   }
@@ -32,6 +33,7 @@ export async function httpJson(
   try {
     text = await res.text();
   } catch (err) {
+    if (init.signal?.aborted) throw new DecisionError('aborted', 'The request was cancelled.');
     if (timeout.aborted) throw new DecisionError('timeout', `No answer from ${new URL(url).host} within ${Math.round(init.timeoutMs / 1000)} s.`);
     throw new DecisionError('offline', `Connection to ${new URL(url).host} dropped: ${(err as Error).message}`);
   }

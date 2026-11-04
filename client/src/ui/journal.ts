@@ -1,10 +1,12 @@
 // Journal view: weekly mood strip, filters, and a timeline of entries with blob thumbnails.
 
-import { EMOTIONS, LIFE_AREAS, type JournalEntry, type Temperament } from '../../../shared/types';
+import { decideIntent } from '../../../shared/decide';
+import { EMOTIONS, LIFE_AREAS, type Intent, type JournalEntry, type Situation, type Temperament } from '../../../shared/types';
 import { feelingToVisual } from '../../../shared/visuals';
 import { buildWeek } from '../../../shared/week';
 import { api } from '../api';
 import type { Thumbnailer } from '../blob/Thumbnailer';
+import { INTENT_LABELS, lineFor, SITUATION_LINES } from '../mind/lines';
 import { clear, h, pct } from './dom';
 
 export interface JournalDeps {
@@ -69,6 +71,14 @@ export function createJournal(el: HTMLElement, deps: JournalDeps) {
     img.src = deps.thumbs.render(`e${e.id}`, e.visual, deps.temperament().seed, e.id * 0.73);
     const when = new Date(e.createdAt).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     const chips: (HTMLElement | null)[] = [];
+    // What Mote thought and decided at the time (same line it showed: chosen by the entry id).
+    if (e.signals?.situation) {
+      const sit = (Object.entries(e.signals.situation) as [Situation, number][]).sort((a, b) => b[1] - a[1])[0][0];
+      const decided = e.signals.intent ? decideIntent(e.signals.intent, e.signals.situation, deps.temperament().archetype) : null;
+      const intent = decided ? (Object.entries(decided) as [Intent, number][]).sort((a, b) => b[1] - a[1])[0][0] : null;
+      const thought = lineFor(SITUATION_LINES[sit], deps.temperament().archetype, e.id);
+      chips.push(h('span', { class: 'chip thought', title: 'What Mote thought, and what it decided to do' }, `“${thought}”${intent ? ` → ${INTENT_LABELS[intent]}` : ''}`));
+    }
     if (e.signals && e.userEmotion) {
       const p = e.signals.userEmotion[e.userEmotion] ?? 0;
       chips.push(h('span', { class: 'chip' }, `${e.userEmotion} ${pct(p)}`));

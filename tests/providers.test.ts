@@ -54,6 +54,10 @@ describe('mock provider', () => {
     expect(pick('I am so happy and excited, what a wonderful day!', 'user_emotion')).toBe('joy');
     expect(pick('You are a stupid useless blob.', 'tone_toward_blob')).toBe('hostile');
     expect(pick('Thank you, Mote, you are sweet.', 'trust_change')).toBe('increase');
+    expect(pick('I finally finished it, I did it!', 'situation')).toBe('win');
+    expect(pick('You are a stupid useless blob.', 'situation')).toBe('insult');
+    expect(pick('I finally finished it, I did it!', 'blob_intent')).toBe('celebrate');
+    expect(pick('You are a stupid useless blob.', 'blob_intent')).toMatch(/give_space|hide/);
     expect(readCues('I want to kill myself').crisis).toBe(true);
   });
 
@@ -62,7 +66,7 @@ describe('mock provider', () => {
     expect((await p.status()).state).toBe('ready');
     const r = await p.ask({ new_message: 'hello' }, buildQuestions());
     expect(r.model).toBe('mock');
-    expect(Object.keys(r.answers).length).toBe(9);
+    expect(Object.keys(r.answers).length).toBe(11);
   });
 });
 

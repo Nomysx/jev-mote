@@ -228,3 +228,166 @@ export class GestureRig {
     return sum;
   }
 }
+
+// ---- Behaviors: sustained actions Mote decides on (after an entry, or on its own while idle) ----
+
+export type BehaviorKind =
+  | 'come_closer'
+  | 'comfort'
+  | 'celebrate'
+  | 'give_space'
+  | 'hide'
+  | 'listen'
+  | 'play'
+  | 'rest'
+  | 'nap'
+  | 'look_around'
+  | 'wait_by_text'
+  | 'wander'
+  | 'stretch'
+  | 'hum'
+  | 'sulk'
+  | 'glow';
+
+export const BEHAVIOR_DURATION: Record<BehaviorKind, number> = {
+  come_closer: 14,
+  comfort: 16,
+  celebrate: 9,
+  give_space: 14,
+  hide: 12,
+  listen: 14,
+  play: 12,
+  rest: 18,
+  nap: 40,
+  look_around: 10,
+  wait_by_text: 25,
+  wander: 16,
+  stretch: 3,
+  hum: 6,
+  sulk: 18,
+  glow: 10,
+};
+
+/** One frame of a behavior: a pose plus small changes to the look. */
+export interface BehaviorFrame {
+  pose: Pose;
+  /** Added to brightness. */
+  brightness: number;
+  /** Relative speed change (-0.5 = half as fast). */
+  speed: number;
+  /** Added to grey. */
+  grey: number;
+  /** 0..1: dozing (dimmer, slower, smaller movements). */
+  sleepy: number;
+  /** Extra halo glow. */
+  halo: number;
+}
+
+export function behaviorFrame(kind: BehaviorKind, t: number, dur = BEHAVIOR_DURATION[kind]): BehaviorFrame {
+  const f: BehaviorFrame = { pose: restPose(), brightness: 0, speed: 0, grey: 0, sleepy: 0, halo: 0 };
+  if (t < 0 || t >= dur) return f;
+  const p = f.pose;
+  switch (kind) {
+    case 'come_closer':
+      p.z = 0.55;
+      p.scale = 0.04;
+      f.brightness = 0.04;
+      break;
+    case 'comfort':
+      p.z = 0.3;
+      p.pitch = 0.08;
+      f.brightness = 0.12;
+      f.speed = -0.35;
+      f.halo = 0.25;
+      break;
+    case 'celebrate':
+      p.y = 0.16 * Math.abs(Math.sin(t * 6.2));
+      p.roll = 0.08 * Math.sin(t * 5.1);
+      p.squash = 0.05 * Math.sin(t * 12.4);
+      f.brightness = 0.15;
+      f.speed = 0.4;
+      f.halo = 0.3;
+      break;
+    case 'give_space':
+      p.z = -0.6;
+      p.scale = -0.06;
+      break;
+    case 'hide':
+      p.z = -0.4;
+      p.scale = -0.18;
+      p.yaw = 0.6;
+      f.brightness = -0.1;
+      break;
+    case 'listen':
+      p.z = 0.12;
+      p.y = -0.03;
+      p.pitch = 0.1;
+      f.speed = -0.5;
+      break;
+    case 'play':
+      p.x = 0.35 * Math.sin(t * 1.7);
+      p.y = 0.12 * Math.abs(Math.sin(t * 4));
+      p.roll = 0.12 * Math.sin(t * 3);
+      f.speed = 0.3;
+      break;
+    case 'rest':
+      p.y = -0.1;
+      p.squash = -0.05;
+      f.speed = -0.5;
+      f.sleepy = 0.6;
+      break;
+    case 'nap':
+      p.y = -0.14;
+      p.squash = -0.07;
+      p.pitch = 0.1;
+      f.speed = -0.7;
+      f.sleepy = 0.9;
+      break;
+    case 'look_around':
+      p.yaw = 0.5 * Math.sin(t * 0.9);
+      p.pitch = 0.1 * Math.sin(t * 0.6);
+      break;
+    case 'wait_by_text':
+      p.y = -0.25;
+      p.z = 0.25;
+      p.pitch = 0.15;
+      break;
+    case 'wander':
+      p.x = 0.4 * Math.sin(t * 0.5);
+      p.y = 0.12 * Math.sin(t * 0.8);
+      p.yaw = 0.2 * Math.sin(t * 0.5);
+      break;
+    case 'stretch':
+      f.brightness = 0.05; // the stretch itself is the 'wake' gesture
+      break;
+    case 'hum':
+      p.roll = 0.06 * Math.sin(t * 2.2);
+      p.y = 0.03 * Math.sin(t * 4.4);
+      f.halo = 0.1;
+      break;
+    case 'sulk':
+      p.yaw = -0.7;
+      p.y = -0.06;
+      f.brightness = -0.12;
+      f.grey = 0.25;
+      f.speed = -0.3;
+      break;
+    case 'glow':
+      f.brightness = 0.25;
+      f.halo = 0.45;
+      break;
+  }
+  // Ease in over a second, out over the last 1.5 s.
+  const env = smooth(0, 1, t) * (1 - smooth(dur - 1.5, dur, t));
+  scaleFrame(f, env);
+  return f;
+}
+
+export function scaleFrame(f: BehaviorFrame, k: number) {
+  for (const key of Object.keys(f.pose) as (keyof Pose)[]) f.pose[key] *= k;
+  f.brightness *= k;
+  f.speed *= k;
+  f.grey *= k;
+  f.sleepy *= k;
+  f.halo *= k;
+}

@@ -4,17 +4,18 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { topTwo } from '../shared/math';
-import type { InstalledModel, JournalEntry, MoodState, ProviderStatus, Signals, Temperament } from '../shared/types';
+import { IDLE_ACTIONS, IDLE_THOUGHTS, type IdleAction, type IdleThought, type InstalledModel, type JournalEntry, type MoodState, type ProviderStatus, type Signals, type Temperament } from '../shared/types';
 import { moodToVisual, type VisualParams } from '../shared/visuals';
 import type { Clock } from './clock';
 import { ROOT_DIR, type AppConfig } from './config';
 import type { BlobRow, EntryFilter, MoteDb } from './db';
 import type { Catalog, Preset } from './decision/catalog';
-import { toSignals } from './decision/parse';
-import { buildQuestions } from './decision/questions';
+import { choiceDist, toSignals } from './decision/parse';
+import { buildIdleQuestions, buildQuestions } from './decision/questions';
 import { buildState, type BuiltState } from './decision/stateBuilder';
 import { DecisionError, type DecisionProvider } from './decision/types';
 import { guessLanguage } from './language';
+import { buildIdleState, pickMemory } from './mind';
 import { applyMessage, applyUnreadable, decay, describeGrudges, describeMood, initialMood } from './mood/engine';
 import { describeTemperament, generateTemperament, randomSeed } from './mood/temperament';
 import { TUNING } from './mood/tuning';
@@ -68,8 +69,17 @@ const SKIP_NOTICES: Record<string, string> = {
   language: 'Saved to your journal. The current model only reads English, so Mote didn’t react to this one.',
 };
 
+export interface ThinkResult {
+  thought: { probabilities: Record<IdleThought, number>; confidence: number } | null;
+  action: { probabilities: Record<IdleAction, number>; confidence: number } | null;
+  memory: { id: number; text: string; when: number } | null;
+  ms: number;
+  skipped: string | null;
+}
+
 export class MoteService {
   private queue: Promise<unknown> = Promise.resolve();
+  private recentlyRemembered: number[] = [];
   readonly wellbeing: WellbeingCard;
 
   constructor(
@@ -274,6 +284,44 @@ export class MoteService {
 
   journal(filter: EntryFilter) {
     return this.db.listEntries(filter);
+  }
+
+  /**
+   * Background thinking: what is on Mote's mind right now, and what it does next. Read-only (the
+   * mood is not changed) and not queued behind entries; the client cancels it when you start typing.
+   */
+  async think(signal?: AbortSignal): Promise<ThinkResult> {
+    const empty: ThinkResult = { thought: null, action: null, memory: null, ms: 0, skipped: null };
+    const status = await this.provider.status();
+    if (status.state !== 'ready') return { ...empty, skipped: status.state };
+    const { blob } = this.ensureBlob();
+    const now = this.clock.now();
+    const mood = decay(blob.mood, blob.temperament, now);
+    const recent = this.db.listEntries({ since: now - 14 * 24 * 3_600_000, limit: 200 });
+    const last = this.db.listEntries({ limit: 1 })[0];
+    const memory = pickMemory(recent, now, this.recentlyRemembered);
+    const profile = this.provider.profile();
+    const state = buildIdleState({ mood, temperament: blob.temperament, now, lastEntryAt: last?.createdAt ?? null, memory }, profile);
+    const t0 = Date.now();
+    try {
+      const res = await this.provider.ask(state, buildIdleQuestions(!!memory), { signal, background: true });
+      const thought = choiceDist(res.answers, 'idle_thought', IDLE_THOUGHTS, 'content');
+      const action = choiceDist(res.answers, 'idle_action', IDLE_ACTIONS, 'look_around');
+      const top = Object.entries(thought.dist).sort((a, b) => b[1] - a[1])[0][0];
+      if (memory && top.startsWith('remember')) {
+        this.recentlyRemembered = [memory.id, ...this.recentlyRemembered.filter((id) => id !== memory.id)].slice(0, 5);
+      }
+      return {
+        thought: { probabilities: thought.dist, confidence: thought.confidence },
+        action: { probabilities: action.dist, confidence: action.confidence },
+        memory: memory ? { id: memory.id, text: memory.text, when: memory.createdAt } : null,
+        ms: Date.now() - t0,
+        skipped: null,
+      };
+    } catch (err) {
+      if (err instanceof DecisionError) return { ...empty, skipped: err.code, ms: Date.now() - t0 };
+      throw err;
+    }
   }
 
   async models(): Promise<{

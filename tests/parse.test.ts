@@ -34,7 +34,7 @@ describe('validateResponse', () => {
     expect(r.model).toBe('laya');
     expect(r.usage).toEqual({ input_tokens: 199, output_tokens: 0 });
     expect(r.answers.user_emotion).toMatchObject({ type: 'choice', choice: 'joy' });
-    expect(r.invalid.sort()).toEqual(['blob_reaction', 'life_area', 'tone_toward_blob', 'trust_change', 'user_intensity']);
+    expect(r.invalid.sort()).toEqual(['blob_intent', 'blob_reaction', 'life_area', 'situation', 'tone_toward_blob', 'trust_change', 'user_intensity']);
   });
 
   it('normalizes probabilities and fills missing options with 0', () => {
@@ -91,6 +91,25 @@ describe('toSignals', () => {
     expect(s.trustChange.stay).toBe(1);
     expect(s.blobReaction.calm).toBe(1);
     expect(s.warnings).toEqual(expect.arrayContaining(['tone_toward_blob', 'trust_change', 'blob_reaction', 'user_intensity']));
+  });
+
+  it('reads the kind of moment and the decision (Mote\'s mind)', () => {
+    const raw = {
+      answers: {
+        situation: { type: 'choice', choice: 'win', probabilities: { win: 0.7, good_news: 0.2, ordinary: 0.1 }, confidence: 0.6 },
+        blob_intent: { type: 'choice', choice: 'celebrate', probabilities: { celebrate: 0.8, play: 0.2 }, confidence: 0.7 },
+      },
+    };
+    const s = toSignals(validateResponse(questions, raw, 'm').answers);
+    expect(s.situation!.win).toBeCloseTo(0.7);
+    expect(s.situation!.none).toBe(0);
+    expect(s.situationConfidence).toBe(0.6);
+    expect(s.intent!.celebrate).toBeCloseTo(0.8);
+    // Missing: neutral fallbacks, with zero confidence so nothing is shown as a confident thought.
+    const empty = toSignals(validateResponse(questions, { answers: { surprising: { type: 'noul', noul: 0.1 } } }, 'm').answers);
+    expect(empty.situation!.none).toBe(1);
+    expect(empty.situationConfidence).toBe(0);
+    expect(empty.intent!.listen).toBe(1);
   });
 
   it('reads yes/no questions asked either as noul or as a two-option choice', () => {

@@ -7,11 +7,14 @@ import { VISUAL_KEYS, VISUAL_RANGES, type VisualParams } from '../../../shared/v
 import { api, type MoodSummary, type StateResponse, type TickResponse } from '../api';
 import type { SoundEngine } from '../audio/SoundEngine';
 import type { BlobView } from '../blob/BlobView';
+import type { ThoughtLayer } from '../mind/ThoughtLayer';
 import { clear, h } from './dom';
 
 export interface DebugDeps {
   view: BlobView;
   sound: SoundEngine;
+  layer: ThoughtLayer;
+  thinkNow: () => void;
   onTick: (t: TickResponse) => void;
   onRebirth: (s: StateResponse) => void;
 }
@@ -104,6 +107,41 @@ export function createDebug(el: HTMLElement, deps: DebugDeps) {
       }),
       btn('wake', () => deps.view.wake(deps.view.getCurrent(), deps.view.getTarget())),
       btn('birth', () => void deps.view.playBirth()),
+    ),
+    h('h3', {}, "Mote's mind (preview)"),
+    h(
+      'div',
+      { class: 'row' },
+      btn('clear thought', () =>
+        void deps.layer.play({
+          thoughts: [
+            { text: 'you did it!', p: 0.71 },
+            { text: 'good news!', p: 0.16 },
+            { text: "that's warm", p: 0.07 },
+            { text: 'mm, okay', p: 0.04 },
+          ],
+          confidence: 0.72,
+          decision: { options: [{ text: 'celebrate', p: 0.74 }, { text: 'come closer', p: 0.18 }, { text: 'play', p: 0.08 }], confidence: 0.6 },
+          onSettle: () => reactPreview('joy', { intensity: 0.8 }),
+          onDecide: () => deps.view.behave('celebrate'),
+        }),
+      ),
+      btn('undecided', () =>
+        void deps.layer.play({
+          thoughts: [
+            { text: 'that stung', p: 0.31 },
+            { text: 'that sounds hard', p: 0.28 },
+            { text: 'hmm…', p: 0.22 },
+            { text: "that's a lot", p: 0.19 },
+          ],
+          confidence: 0.06,
+          decision: { options: [{ text: 'give space', p: 0.38 }, { text: 'listen', p: 0.34 }, { text: 'hide', p: 0.28 }], confidence: 0.05 },
+          onSettle: () => reactPreview('sadness', { intensity: 0.5, second: 'anger', mixed: 0.8, clarity: 0.2 }),
+          onDecide: () => deps.view.behave('give_space'),
+        }),
+      ),
+      btn('think now', () => deps.thinkNow()),
+      ...(['nap', 'hum', 'sulk', 'wander', 'wait_by_text', 'glow', 'hide', 'come_closer'] as const).map((k) => btn(k.replace(/_/g, ' '), () => deps.view.behave(k))),
     ),
     h('h3', {}, 'Blob'),
     h(

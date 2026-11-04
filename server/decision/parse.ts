@@ -2,7 +2,7 @@
 // Providers call validateResponse(); the pipeline calls toSignals().
 
 import { clamp, concentration, normalize } from '../../shared/math';
-import { EMOTIONS, LIFE_AREAS, TONES, TRUST_CHANGES, type Emotion, type EmotionDist, type LifeArea, type Signals } from '../../shared/types';
+import { EMOTIONS, INTENTS, LIFE_AREAS, SITUATIONS, TONES, TRUST_CHANGES, type Emotion, type EmotionDist, type LifeArea, type Signals } from '../../shared/types';
 import { DEFAULT_QUESTION_CONFIG, YES_KEY, type QuestionConfig, type YesNoQuestionName } from './questions';
 import { DecisionError, type Answer, type Answers, type Question, type Questions, type SystemOneResponse } from './types';
 
@@ -104,7 +104,8 @@ export function validateResponse(questions: Questions, raw: unknown, requestedMo
 
 // ---- Answers -> Signals ----------------------------------------------------------------------
 
-function choiceDist<K extends string>(answers: Answers, name: string, keys: readonly K[], fallback: K): { dist: Record<K, number>; confidence: number; ok: boolean } {
+/** A choice answer as a distribution over `keys` (missing keys get 0); falls back to `fallback` = 1. */
+export function choiceDist<K extends string>(answers: Answers, name: string, keys: readonly K[], fallback: K): { dist: Record<K, number>; confidence: number; ok: boolean } {
   const a = answers[name];
   const dist = {} as Record<K, number>;
   if (a && a.type === 'choice') {
@@ -157,6 +158,11 @@ export function toSignals(answers: Answers, _config: QuestionConfig = DEFAULT_QU
   const distress = yesProbability(answers, 'distress_flag');
   if (distress === undefined) warnings.push('distress_flag');
 
+  const situation = choiceDist(answers, 'situation', SITUATIONS, 'none');
+  if (!situation.ok) warnings.push('situation');
+  const intent = choiceDist(answers, 'blob_intent', INTENTS, 'listen');
+  if (!intent.ok) warnings.push('blob_intent');
+
   const lifeArea = Object.entries(life.dist).sort((a, b) => b[1] - a[1])[0][0] as LifeArea;
   return {
     userEmotion: userEmotion.dist,
@@ -171,6 +177,10 @@ export function toSignals(answers: Answers, _config: QuestionConfig = DEFAULT_QU
     trustChange: trust.dist,
     surprising: surprising ?? 0,
     distress: distress ?? 0,
+    situation: situation.dist,
+    situationConfidence: situation.ok ? situation.confidence : 0,
+    intent: intent.dist,
+    intentConfidence: intent.ok ? intent.confidence : 0,
     warnings,
   };
 }

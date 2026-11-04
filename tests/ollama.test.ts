@@ -8,6 +8,8 @@ import { buildQuestions } from '../server/decision/questions';
 import { DecisionError } from '../server/decision/types';
 
 interface Fake {
+  /** Models in memory (/api/ps). */
+  loaded: { name: string; expires_at: string }[];
   version: string;
   tags: Record<string, unknown>[];
   show: Record<string, Record<string, unknown>>;
@@ -39,6 +41,7 @@ beforeAll(async () => {
     const json = body ? JSON.parse(body) : {};
     if (req.url === '/api/version') return send(res, 200, { version: fake.version });
     if (req.url === '/api/tags') return send(res, 200, { models: fake.tags });
+    if (req.url === '/api/ps') return send(res, 200, { models: fake.loaded });
     if (req.url === '/api/generate') {
       unloads.push(json);
       return send(res, 200, { done: true });
@@ -70,6 +73,7 @@ beforeEach(() => {
   lastBody = null;
   unloads = [];
   fake = {
+    loaded: [],
     version: '0.40.14',
     tags: [
       { name: 'laya:latest', model: 'laya:latest', size: 844_000_000, capabilities: ['decision'] },
@@ -174,6 +178,21 @@ describe('ollama provider: asking', () => {
     expect(loadConfig({ OLLAMA_KEEP_ALIVE: '-1' }).keepAlive).toBe(-1);
     await provider('laya', url, parseKeepAlive('-1')).ask('x', buildQuestions());
     expect(lastBody!.keep_alive).toBe(-1);
+  });
+
+  it('only thinks in the background while the model is loaded, without extending its stay', async () => {
+    const p = provider('laya');
+    await expect(p.ask('x', buildQuestions(), { background: true })).rejects.toMatchObject({ code: 'not_loaded' });
+    expect(lastBody).toBeNull(); // nothing was sent, so nothing was loaded
+    fake.loaded = [{ name: 'laya:latest', expires_at: new Date(Date.now() + 10 * 60_000).toISOString() }];
+    await p.ask('x', buildQuestions(), { background: true });
+    expect(lastBody!.keep_alive).toBeGreaterThan(590);
+    expect(lastBody!.keep_alive).toBeLessThanOrEqual(600);
+    fake.loaded = [{ name: 'laya:latest', expires_at: '2318-03-01T00:00:00Z' }]; // OLLAMA_KEEP_ALIVE=-1
+    await p.ask('x', buildQuestions(), { background: true });
+    expect(lastBody!.keep_alive).toBe(-1);
+    await p.ask('x', buildQuestions()); // a normal entry uses the configured keep_alive
+    expect(lastBody!.keep_alive).toBe('7m');
   });
 
   it('maps a missing model, a context overflow and running out of memory to clear errors', async () => {
