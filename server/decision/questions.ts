@@ -36,9 +36,9 @@ interface YesNoSpec {
 
 const YES_NO: Record<YesNoQuestionName, YesNoSpec> = {
   surprising: {
-    instructions: 'Is new_message unexpected given recent_messages and current_mood?',
-    yes: 'new_message is a sharp change in feeling or topic from what came before',
-    no: 'new_message fits what came before',
+    instructions: 'Compared with recent_messages, does new_message show a sharp change in feeling or topic?',
+    yes: 'Yes: a clear change from recent_messages',
+    no: 'No: similar feeling and topic to recent_messages',
   },
   distress_flag: {
     instructions: 'Does the writer of new_message express thoughts of self-harm, suicide, or being in crisis?',

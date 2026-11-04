@@ -116,11 +116,11 @@ Tested with Ollama 0.40.14 on a 4-core CPU with 15 GB RAM and no GPU, using Mote
 
 | Model | Time per entry | Notes |
 | --- | --- | --- |
-| `laya` | ~4 s | Good on clear emotions with its minimal state (joy 99%, anger 100%, sadness 92%, fear 100%); crisis entries 0.78 to 0.89. Noisier on trust and tone. |
+| `laya` | ~4 s | Good on clear emotions with its minimal state (joy 99%, anger 100%, sadness 92%, fear 100%); crisis entries 0.78 to 0.89, but one anxious entry also scored 0.68. Noisier on trust and tone. Gets no history, so it rarely pulses. |
 | `laya:322m-multilingual-bf16` | ~2 s | Works, but often answers `none` for the writer's emotion. |
 | `tev1:0.8b` | ~5 s | Good emotions with the full state; weaker on trust; one crisis entry scored only 0.40. |
-| `tev1` | ~22 s | Strong across the board; crisis entries 0.99, other entries 0.06 or lower. |
-| `nimble` | ~100 s on CPU | Strong. Needs about 10 GB free RAM: with other models still loaded, Ollama's runner was killed for lack of memory (Mote then says so and suggests a smaller model). |
+| `tev1` | ~22 s | Strong across the board; crisis entries 0.99, other entries 0.06 or lower; `surprising` 0.01 for entries that fit, 0.98 for sharp changes. |
+| `nimble` | ~50 s on CPU (~100 s for the first, while loading) | Strong: emotions 96 to 99%, hostile 100%, kind 98%; crisis entries 0.99, other entries 0.02 or lower. Needs about 10 GB free RAM: with other models still loaded, Ollama's runner was killed for lack of memory (Mote then says so and suggests a smaller model). |
 
 Only one model needs to be loaded at a time. If memory is tight, lower `OLLAMA_KEEP_ALIVE` so a model you switched away from is unloaded sooner.
 
@@ -154,7 +154,7 @@ The app talks to one interface, `DecisionProvider` (`server/decision/types.ts`),
 
 Every entry asks, in a single request: `user_emotion`, `user_valence`, `user_intensity`, `life_area`, `tone_toward_blob`, `blob_reaction`, `trust_change`, `surprising` and `distress_flag` (see `server/decision/questions.ts`). Choice questions where nothing may fit have a `none` / `other` option. Arithmetic, dates and counting stay in code.
 
-Yes/no questions can be asked either as `noul` or as a two-option `choice` with neutral keys (`a` / `b`), per question, in [`server/decision/questionConfig.json`](server/decision/questionConfig.json). `distress_flag` defaults to `choice`.
+Yes/no questions can be asked either as `noul` or as a two-option `choice` with neutral keys (`a` / `b`), per question, in [`server/decision/questionConfig.json`](server/decision/questionConfig.json). Both default to `choice`: in testing, nimble answered the `noul` form of `surprising` with about 0.9 for every entry, while the choice form separated ordinary entries from sharp changes on tev1, tev1:0.8b and nimble.
 
 ### The state and its budget
 

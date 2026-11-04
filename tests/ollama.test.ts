@@ -19,6 +19,7 @@ let fake: Fake;
 let server: Server;
 let url: string;
 let lastBody: Record<string, unknown> | null = null;
+let unloads: unknown[] = [];
 
 const read = (req: IncomingMessage) =>
   new Promise<string>((resolve) => {
@@ -38,6 +39,10 @@ beforeAll(async () => {
     const json = body ? JSON.parse(body) : {};
     if (req.url === '/api/version') return send(res, 200, { version: fake.version });
     if (req.url === '/api/tags') return send(res, 200, { models: fake.tags });
+    if (req.url === '/api/generate') {
+      unloads.push(json);
+      return send(res, 200, { done: true });
+    }
     if (req.url === '/api/show') {
       const s = fake.show[json.model];
       return s ? send(res, 200, s) : send(res, 404, { error: `model '${json.model}' not found` });
@@ -63,6 +68,7 @@ const answers = {
 
 beforeEach(() => {
   lastBody = null;
+  unloads = [];
   fake = {
     version: '0.40.14',
     tags: [
@@ -176,12 +182,15 @@ describe('ollama provider: asking', () => {
     await expect(provider('clef:cloud').ask('x', buildQuestions())).rejects.toBeInstanceOf(DecisionError);
   });
 
-  it('switches models live', async () => {
+  it('switches models live and unloads the previous one', async () => {
     const p = provider('nimble');
     expect((await p.status(true)).state).toBe('model_missing');
     const s = await p.setModel('tev1');
     expect(s.state).toBe('ready');
     expect(p.model).toBe('tev1');
+    // The previous model is unloaded to free memory.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(unloads).toEqual([{ model: 'nimble', keep_alive: 0 }]);
   });
 
   it('lists installed models with catalog info and cloud flags', async () => {

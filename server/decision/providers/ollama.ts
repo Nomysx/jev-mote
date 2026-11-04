@@ -173,6 +173,12 @@ class OllamaProvider implements DecisionProvider {
   }
 
   async setModel(model: string): Promise<ProviderStatus> {
+    const previous = this.model;
+    if (canonicalName(previous) !== canonicalName(model) && checkLocalUrl(this.base).ok && !isCloudName(previous)) {
+      // Free the old model's memory right away (what `ollama stop` does), so switching to a big model
+      // on a small machine doesn't run out of memory. Best effort: errors are ignored.
+      void httpJson(`${this.base}/api/generate`, { method: 'POST', body: { model: previous, keep_alive: 0 }, timeoutMs: CHECK_TIMEOUT_MS }).catch(() => undefined);
+    }
     this.model = model.trim();
     this.cached = null;
     this.contextTokens = undefined;
