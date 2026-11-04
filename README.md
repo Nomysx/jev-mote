@@ -118,7 +118,7 @@ Tested with Ollama 0.40.14 on a 4-core CPU with 15 GB RAM and no GPU, using Mote
 | --- | --- | --- |
 | `laya` | ~4 s | Good on clear emotions with its minimal state (joy 99%, anger 100%, sadness 92%, fear 100%); crisis entries 0.78 to 0.89, but one anxious entry also scored 0.68. Noisier on trust and tone. Gets no history, so it rarely pulses. |
 | `laya:322m-multilingual-bf16` | ~2 s | Works, but often answers `none` for the writer's emotion. |
-| `tev1:0.8b` | ~5 s | Good emotions with the full state; weaker on trust; one crisis entry scored only 0.40. |
+| `tev1:0.8b` | ~5 s | Good emotions once the mood is sent as numbers (worded moods leaked into its answers); weaker on trust; one crisis entry scored only 0.40. |
 | `tev1` | ~22 s | Strong across the board; crisis entries 0.99, other entries 0.06 or lower; `surprising` 0.01 for entries that fit, 0.98 for sharp changes. |
 | `nimble` | ~50 s on CPU (~100 s for the first, while loading) | Strong: emotions 96 to 99%, hostile 100%, kind 98%; crisis entries 0.99, other entries 0.02 or lower. Needs about 10 GB free RAM: with other models still loaded, Ollama's runner was killed for lack of memory (Mote then says so and suggests a smaller model). |
 
@@ -160,7 +160,7 @@ Yes/no questions can be asked either as `noul` or as a two-option `choice` with 
 
 The state is a JSON object: `new_message`, `current_mood` (words plus numbers), `temperament` (words), `grudges` and `recent_messages` (with relative times). The builder estimates tokens and fits the state to the model's `maxStateTokens`: it drops the oldest messages first, then shortens long old messages, then drops the remaining history. `new_message` is never cut, and it is the first key, so models that truncate long states only ever lose history.
 
-Models can also restrict which fields they get (`stateFields`, `moodStyle` in the catalog). **Laya** gets only `new_message` and a numbers-only mood. In testing, Laya mixed every word in the state into every answer (with a worded mood or the temperament present, a sad entry read as "calm" or "curious", and crisis detection dropped from about 0.8 to 0.2). The mood engine applies temperament, grudges and history in code, so small-context models still work.
+Models can also restrict which fields they get (`stateFields`, `moodStyle` in the catalog). **Laya** gets only `new_message` and a numbers-only mood. In testing, Laya mixed every word in the state into every answer (with a worded mood or the temperament present, a sad entry read as "calm" or "curious", and crisis detection dropped from about 0.8 to 0.2). **tev1:0.8b** gets the full state but a numbers-only mood: with "very happy" in `current_mood`, a sad entry read as 5% sadness (98% with numbers only); its temperament, grudges and history didn't leak. tev1 (4B) and nimble were unaffected. The mood engine applies temperament, grudges and history in code, so small-context models still work.
 
 ### Mood engine
 

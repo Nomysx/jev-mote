@@ -137,7 +137,9 @@
       "license": "Experimental. Dataset builders and training scripts are MIT; the weights license is still being finalized.",
       "tier": "lite",
       "notes": "Experimental. Fine-tuned from Qwen3.5 0.8B.",
-      "cloudTags": []
+      "cloudTags": [],
+      "moodStyle": "numbers",
+      "testNotes": "Tested with Mote's questions: emotion words in current_mood leaked into the writer's emotion (with 'very happy' in the mood, a sad entry read as 5% sadness; with a numbers-only mood, 98%). Temperament, grudges and history did not leak, so only the mood is sent as numbers."
     },
     {
       "name": "tev1",
