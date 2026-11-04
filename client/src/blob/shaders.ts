@@ -48,6 +48,8 @@ float snoise(vec3 v) {
 }
 `;
 
+export const RIPPLE_COUNT = 6;
+
 export const vertexShader = /* glsl */ `
 uniform float uPhase;      // accumulated movement phase (speed is integrated on the CPU)
 uniform float uAmp;
@@ -61,13 +63,35 @@ uniform float uLean;
 uniform float uAvoid;
 uniform float uSeed;
 uniform vec3 uCursorDir;
+// Surface ripples: xyz = origin on the unit sphere (object space), w = age in seconds (< 0: unused).
+uniform vec4 uRipples[${RIPPLE_COUNT}];
+uniform float uRippleAmp[${RIPPLE_COUNT}];
 
 varying vec3 vNormalV;
 varying vec3 vViewPos;
 varying vec3 vObj;
 varying float vDisp;
+varying float vRipple;
 
 ${NOISE}
+
+// Ripples travel over the surface like waves on jelly: a dent at the origin that springs back,
+// and a soft ring that runs outward and fades.
+float ripples(vec3 p) {
+  float sum = 0.0;
+  for (int i = 0; i < ${RIPPLE_COUNT}; i++) {
+    vec4 r = uRipples[i];
+    float amp = uRippleAmp[i];
+    if (r.w < 0.0 || amp <= 0.0) continue;
+    float age = r.w;
+    float d = acos(clamp(dot(p, r.xyz), -1.0, 1.0));
+    float front = age * 2.4;
+    float ring = exp(-pow((d - front) / 0.3, 2.0)) * exp(-age * 1.9);
+    float dent = exp(-d * d / 0.07) * exp(-age * 6.5) * cos(age * 15.0);
+    sum += amp * (0.1 * ring - 0.16 * dent);
+  }
+  return sum;
+}
 
 float displacement(vec3 p) {
   float t = uPhase;
@@ -84,9 +108,9 @@ float displacement(vec3 p) {
   // Mixed feelings: fast, jelly-like wobble.
   float wob = snoise(p * 0.75 + vec3(t * 2.4)) * uWobble * 0.14;
   // Cursor: curiosity bulges toward it, fear flattens away from it.
-  float facing = dot(p, uCursorDir);
-  float cursor = smoothstep(0.0, 1.0, facing) * uLean * 0.2 - smoothstep(0.0, 1.0, facing) * uAvoid * 0.14;
-  return lumps + motion + spikes + pocket + wob + cursor;
+  float facing = smoothstep(0.0, 1.0, dot(p, uCursorDir));
+  float cursor = facing * (uLean * 0.2 - uAvoid * 0.14);
+  return lumps + motion + spikes + pocket + wob + cursor + ripples(p);
 }
 
 vec3 deform(vec3 unitP) {
@@ -113,6 +137,7 @@ void main() {
 
   vObj = n;
   vDisp = length(p0) - 1.0;
+  vRipple = ripples(n);
   vec4 mv = modelViewMatrix * vec4(p0, 1.0);
   vViewPos = mv.xyz;
   vNormalV = normalize(normalMatrix * dn);
@@ -131,6 +156,7 @@ uniform float uGrey;
 uniform float uDim;
 uniform float uListen;
 uniform float uPulse;
+uniform float uGlow;
 uniform float uTime;
 uniform float uOpacity;
 uniform float uSeed;
@@ -139,50 +165,81 @@ varying vec3 vNormalV;
 varying vec3 vViewPos;
 varying vec3 vObj;
 varying float vDisp;
+varying float vRipple;
 
 ${NOISE}
 
+// Bump mapping without tangents (Mikkelsen): perturbs the normal by the screen-space slope of h.
+vec3 bump(vec3 pos, vec3 n, float h, float strength) {
+  vec3 dpx = dFdx(pos);
+  vec3 dpy = dFdy(pos);
+  vec3 r1 = cross(dpy, n);
+  vec3 r2 = cross(n, dpx);
+  float det = dot(dpx, r1);
+  vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+  return normalize(abs(det) * n - strength * grad);
+}
+
 void main() {
-  vec3 N = normalize(vNormalV);
   vec3 V = normalize(-vViewPos);
+
+  // Clay texture: soft, fingerprint-like micro bumps (less when hazy).
+  float grain = snoise(vObj * 13.0 + vec3(uSeed)) * 0.7 + snoise(vObj * 29.0) * 0.3;
+  vec3 N = bump(vViewPos, normalize(vNormalV), grain, 0.0022 * (1.0 - 0.6 * uHaze));
 
   // Two color zones for mixed emotions.
   float zn = snoise(vObj * 1.2 + vec3(uSeed) + vec3(0.0, uTime * 0.04, 0.0)) + vObj.y * 0.7;
   float zone = smoothstep(-0.18, 0.18, zn);
   vec3 base = mix(uColorA, mix(uColorA, uColorB, zone), uSplit);
+  // Volume: a little lighter on top, deeper underneath.
+  base *= mix(0.84, 1.08, smoothstep(-1.0, 1.0, vObj.y));
 
-  // Clay lighting: wrapped diffuse, soft fill, gentle specular, rim, and a hint of subsurface glow.
+  // Soft studio light: key + fill + sky/ground ambience.
   vec3 L = normalize(vec3(0.45, 0.8, 0.55));
   float wrap = 0.5;
   float diff = clamp((dot(N, L) + wrap) / (1.0 + wrap), 0.0, 1.0);
   vec3 L2 = normalize(vec3(-0.7, -0.3, 0.4));
-  float fill = (dot(N, L2) * 0.5 + 0.5) * 0.22;
+  float fill = (dot(N, L2) * 0.5 + 0.5) * 0.2;
+  float hemi = N.y * 0.5 + 0.5;
+  vec3 ambient = mix(vec3(0.55, 0.5, 0.58), vec3(1.05, 1.03, 1.08), hemi) * 0.3;
   vec3 H = normalize(L + V);
-  float spec = pow(max(dot(N, H), 0.0), 24.0) * 0.16;
-  float fres = pow(1.0 - max(dot(N, V), 0.0), 2.2);
-  float cavity = smoothstep(-0.12, 0.12, vDisp) * 0.18 + 0.82;
+  float ndh = max(dot(N, H), 0.0);
+  float spec = pow(ndh, 18.0) * 0.1 + pow(ndh, 90.0) * 0.16; // broad sheen + small wet highlight
+  float ndv = max(dot(N, V), 0.0);
+  float fres = pow(1.0 - ndv, 2.4);
+  float cavity = smoothstep(-0.12, 0.12, vDisp) * 0.2 + 0.8;
 
-  vec3 col = base * uLightTint * (0.32 + 0.78 * diff + fill) * cavity;
-  col += spec * vec3(1.0, 0.97, 0.92);
-  col += fres * mix(base, vec3(1.0), 0.45) * 0.32;
-  col += base * (1.0 - diff) * 0.08; // subsurface-ish
-  col *= 0.975 + 0.025 * snoise(vObj * 38.0); // clay grain
+  vec3 col = base * uLightTint * (ambient + 0.74 * diff + fill) * cavity;
+  col += spec * vec3(1.0, 0.97, 0.93) * (1.0 - 0.5 * uHaze);
+  // Translucency: light glows through the thin edges in a deeper, richer tone.
+  vec3 deep = clamp(base * base * 1.7, 0.0, 1.0);
+  float back = pow(clamp(dot(-L, N) * 0.5 + 0.5, 0.0, 1.0), 2.0);
+  col += deep * (fres * 0.42 + back * 0.1);
+  col += fres * mix(base, vec3(1.0), 0.55) * 0.16;
+  // Inner glow (joy, pulses) and the light of a passing ripple.
+  col += base * uGlow * (0.12 + 0.4 * fres);
+  col += max(vRipple, 0.0) * 1.6 * mix(base, vec3(1.0), 0.6);
 
   float lum = dot(col, vec3(0.299, 0.587, 0.114));
   col = mix(col, vec3(lum), clamp(uGrey + uDim * 0.6, 0.0, 1.0));
   col *= uBright;
 
   // Listening shimmer: soft bands drifting over the surface.
-  float band = sin(vObj.y * 13.0 - uTime * 3.2 + snoise(vObj * 2.0 + uTime * 0.2) * 2.5) * 0.5 + 0.5;
-  col += uListen * band * (0.22 * fres + 0.05);
+  if (uListen > 0.002) {
+    float band = sin(vObj.y * 13.0 - uTime * 3.2 + snoise(vObj * 2.0 + uTime * 0.2) * 2.5) * 0.5 + 0.5;
+    col += uListen * band * (0.22 * fres + 0.05);
+  }
 
   col += uPulse * (0.18 + 0.4 * fres);
   col *= mix(1.0, 0.38, uDim);
 
   // Low confidence: hazy, semi-transparent, with fuzzy edges.
-  float speckle = snoise(vObj * 9.0 + vec3(uTime * 0.6)) * 0.5 + 0.5;
-  float alpha = mix(1.0, 0.62 - 0.45 * fres - 0.12 * speckle, uHaze) * uOpacity;
-  gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
+  float alpha = 1.0;
+  if (uHaze > 0.002) {
+    float speckle = snoise(vObj * 9.0 + vec3(uTime * 0.6)) * 0.5 + 0.5;
+    alpha = mix(1.0, 0.62 - 0.45 * fres - 0.12 * speckle, uHaze);
+  }
+  gl_FragColor = vec4(col, clamp(alpha * uOpacity, 0.0, 1.0));
 }
 `;
 

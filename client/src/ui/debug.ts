@@ -1,13 +1,17 @@
 // Debug panel: every visual parameter as a slider (to tune the mapping without a model),
-// fast-forward time, rebirth with a seed, and a live readout of the mood engine.
+// previews of every reaction (gesture + sound), fast-forward time, rebirth with a seed, and a live
+// readout of the mood engine.
 
+import { EMOTIONS, type Emotion } from '../../../shared/types';
 import { VISUAL_KEYS, VISUAL_RANGES, type VisualParams } from '../../../shared/visuals';
 import { api, type MoodSummary, type StateResponse, type TickResponse } from '../api';
+import type { SoundEngine } from '../audio/SoundEngine';
 import type { BlobView } from '../blob/BlobView';
 import { clear, h } from './dom';
 
 export interface DebugDeps {
   view: BlobView;
+  sound: SoundEngine;
   onTick: (t: TickResponse) => void;
   onRebirth: (s: StateResponse) => void;
 }
@@ -62,6 +66,12 @@ export function createDebug(el: HTMLElement, deps: DebugDeps) {
     }
   }
 
+  const btn = (label: string, fn: () => void) => h('button', { class: 'btn', type: 'button', onclick: fn }, label);
+  const reactPreview = (e: Emotion, o: { intensity: number; second?: Emotion; mixed?: number; clarity?: number }) => {
+    deps.view.react(e, o);
+    deps.sound.play(e, o);
+  };
+
   const ff = (hours: number, label: string) =>
     h('button', { class: 'btn', type: 'button', onclick: async () => deps.onTick(await api.fastForward(hours)) }, label);
 
@@ -72,6 +82,29 @@ export function createDebug(el: HTMLElement, deps: DebugDeps) {
     h('div', { class: 'row' }, ff(1, '+1 h'), ff(6, '+6 h'), ff(24, '+1 day'), ff(72, '+3 days'), ff(168, '+7 days')),
     h('h3', {}, 'Mood engine'),
     moodPre,
+    h('h3', {}, 'Reactions (preview only, mood unchanged)'),
+    h(
+      'div',
+      { class: 'row' },
+      EMOTIONS.map((e) => btn(e, () => reactPreview(e, { intensity: 0.8 }))),
+      btn('mixed: anger + sadness', () => reactPreview('anger', { intensity: 0.7, second: 'sadness', mixed: 0.9, clarity: 0.6 })),
+      btn('unsure', () => reactPreview('curiosity', { intensity: 0.4, clarity: 0.1 })),
+      btn('surprise', () => {
+        deps.view.pulse();
+        deps.sound.play('pulse');
+      }),
+      btn('entry arrives', () => void deps.view.absorb(window.innerWidth / 2, window.innerHeight - 60)),
+      btn('soothe', () => {
+        deps.view.soothe();
+        deps.sound.play('soothe');
+      }),
+      btn('puzzled', () => {
+        deps.view.puzzled();
+        deps.sound.play('puzzled', { clarity: 0.3 });
+      }),
+      btn('wake', () => deps.view.wake(deps.view.getCurrent(), deps.view.getTarget())),
+      btn('birth', () => void deps.view.playBirth()),
+    ),
     h('h3', {}, 'Blob'),
     h(
       'div',

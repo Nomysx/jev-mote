@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { VISUAL_TUNING, type VisualParams } from '../../../shared/visuals';
-import { fragmentShader, vertexShader } from './shaders';
+import { fragmentShader, RIPPLE_COUNT, vertexShader } from './shaders';
 
 export type BlobUniforms = {
   [K in
@@ -24,10 +24,13 @@ export type BlobUniforms = {
     | 'uDim'
     | 'uListen'
     | 'uPulse'
+    | 'uGlow'
     | 'uTime'
     | 'uOpacity']: { value: number };
 } & {
   uCursorDir: { value: THREE.Vector3 };
+  uRipples: { value: THREE.Vector4[] };
+  uRippleAmp: { value: number[] };
   uColorA: { value: THREE.Color };
   uColorB: { value: THREE.Color };
   uLightTint: { value: THREE.Color };
@@ -53,9 +56,12 @@ export function createBlobMaterial(): THREE.ShaderMaterial & { uniforms: BlobUni
     uDim: { value: 0 },
     uListen: { value: 0 },
     uPulse: { value: 0 },
+    uGlow: { value: 0 },
     uTime: { value: 0 },
     uOpacity: { value: 1 },
     uCursorDir: { value: new THREE.Vector3(0, 0, 1) },
+    uRipples: { value: Array.from({ length: RIPPLE_COUNT }, () => new THREE.Vector4(0, 0, 1, -1)) },
+    uRippleAmp: { value: Array.from({ length: RIPPLE_COUNT }, () => 0) },
     uColorA: { value: new THREE.Color() },
     uColorB: { value: new THREE.Color() },
     uLightTint: { value: new THREE.Color(1, 1, 1) },
@@ -86,6 +92,8 @@ export function applyVisual(u: BlobUniforms, v: VisualParams) {
   u.uBright.value = v.brightness;
   u.uGrey.value = v.grey;
   u.uDim.value = v.dim;
+  // Inner glow: brighter and rounder (joyful) looks glow softly from within.
+  u.uGlow.value = Math.max(0, (v.brightness - 0.85) * 0.9 + v.roundness * 0.25) * (1 - v.dim);
   const light = 0.55;
   const w = Math.max(-1, Math.min(1, v.warmth));
   const temp = w >= 0 ? WARM_BODY : COLD_BODY;

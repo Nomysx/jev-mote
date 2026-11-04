@@ -583,7 +583,27 @@ select {
   display: none !important;
 }
 
+@media (max-width: 420px) {
+  .brand {
+    display: none;
+  }
+}
+
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
 @media (max-width: 560px) {
+  .top-bar {
+    padding: 12px 12px;
+  }
+  .top-bar nav {
+    gap: 6px;
+  }
+  .icon-btn {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
   .composer {
     bottom: 12px;
   }

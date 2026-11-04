@@ -2,12 +2,14 @@
 
 import type { ProviderStatus } from '../../../shared/types';
 import { api, type BlobInfo, type ModelsResponse, type WellbeingCard } from '../api';
+import type { SoundEngine } from '../audio/SoundEngine';
 import { clear, formatBytes, h } from './dom';
 
 export interface SettingsDeps {
   blob: () => BlobInfo;
   wellbeing: () => WellbeingCard;
   onStatus: (s: ProviderStatus) => void;
+  sound: SoundEngine;
 }
 
 const canonical = (n: string) => (n.includes(':') ? n.toLowerCase() : `${n.toLowerCase()}:latest`);
@@ -148,6 +150,36 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
     ];
   }
 
+  function soundSection() {
+    const snd = deps.sound;
+    const toggle = h('input', {
+      type: 'checkbox',
+      id: 'snd-on',
+      checked: snd.enabled,
+      onchange: (e: Event) => snd.setEnabled((e.target as HTMLInputElement).checked),
+    }) as HTMLInputElement;
+    const vol = h('input', {
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.05,
+      value: snd.volume,
+      'aria-label': 'Volume',
+      oninput: (e: Event) => snd.setVolume(Number((e.target as HTMLInputElement).value)),
+      onchange: () => snd.play('poke', { variant: 1 }),
+    }) as HTMLInputElement;
+    return [
+      h('h3', {}, 'Sound'),
+      h('label', { class: 'row', for: 'snd-on' }, toggle, 'Play sounds when Mote reacts'),
+      h('label', { class: 'row', style: 'margin-top:8px' }, h('span', { class: 'muted' }, 'Volume'), vol),
+      h(
+        'p',
+        { class: 'faint' },
+        'Each Mote has its own voice, made from its temperament, and its mood colors how it sounds. The sounds are synthesized on your computer; there are no audio files. Sound starts after your first click or key press. Tip: you can poke Mote.',
+      ),
+    ];
+  }
+
   function aboutSection() {
     const w = deps.wellbeing();
     return [
@@ -172,7 +204,7 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
     clear(body);
     if (note) body.append(h('p', { class: 'muted' }, note));
     if (m) body.append(h('div', {}, modelSection(m)));
-    body.append(h('div', {}, blobSection()), h('div', {}, aboutSection()));
+    body.append(h('div', {}, blobSection()), h('div', {}, soundSection()), h('div', {}, aboutSection()));
   }
 
   async function load() {

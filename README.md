@@ -194,6 +194,40 @@ Models can also restrict which fields they get (`stateFields`, `moodStyle` in th
 
 While the model is thinking, a listening shimmer runs and the UI stays responsive.
 
+### Body language and sounds
+
+On top of the mood-driven look, Mote reacts with short gestures (`client/src/blob/gestures.ts`) and a sound in its own voice (`client/src/audio/`). Both follow the strongest feeling in its reaction to an entry. A mixed reaction voices both emotions, and an unclear one sounds muffled, wavery and farther away.
+
+| Reaction | Gesture | Sound |
+| --- | --- | --- |
+| Joy | Crouches, hops twice, jiggles | Bright rising arpeggio with a sparkle |
+| Sadness | Sighs, deflates and slumps | A breath, then a slow falling "aww" |
+| Anger | Puffs up, flares spikes, shudders | A huff and a low, rough growl |
+| Fear | Flinches back, shrinks, trembles | A gasp and a high, trembling whimper |
+| Calm | One slow, deep breath | A soft hum on an open fifth |
+| Curiosity | Tilts and leans in | A questioning "hm?" |
+| Disgust | Recoils and turns away | A nasal "bleh" |
+| Surprising entry | A jolt, a flash and a wave from the top | A bubbly "bloop" |
+| Distress safeguard | Slow, soft breathing only | A quiet, warm chord (never alarming) |
+
+More moments:
+- A sent entry flows from the text box into Mote as light, and it gulps it in.
+- While you type, it turns toward the text box, with tiny ripples.
+- Click or tap Mote to poke it: the surface dents, ripples and springs back with a "boing".
+- At birth, the mist swirls together, then pops into shape with a first chirp.
+- After time away, it wakes with a stretch and a yawn.
+- When idle, it slowly looks around; when curious, it follows the cursor.
+
+**Unique voices.** Each Mote's voice comes from its temperament and seed: pitch register by archetype, timbre (FM ratio and depth), vibrato, breathiness and tempo. Its current mood shifts that voice:
+- Valence raises or lowers the pitch.
+- Arousal sets the pace.
+- Clarity sets the brightness.
+- Trust sets the warmth and level.
+
+**How the sound works.** All sound is synthesized live with the Web Audio API, so there are no audio files and nothing is downloaded. It starts after your first click or key press (a browser rule).
+
+**Sound settings.** Toggle sound in the top bar. Set the volume in Settings; it's remembered in this browser only. With the system's "reduce motion" setting on, gestures are smaller and the shakes and trembles stop.
+
 ### Journal
 
 Each entry stores the text, timestamp, the full model answers (with provider and model), the derived signals, and a snapshot of the visual parameters. The journal view shows a timeline with a thumbnail of each snapshot (rendered with the same shader), a weekly mood strip (one blob per day from your average feelings that day), and filters by life area and emotion.
@@ -212,6 +246,7 @@ With `MOTE_DEBUG=true`, a **Debug** button appears (or open the app with `?debug
 - **Fast-forward time** (+1 h to +7 days): mood decay, trust and grudges run on a shifted clock, so you can simulate days of journaling.
 - **Rebirth** with an optional seed: compare two blobs (the seed is shown in Settings).
 - A live readout of the mood engine (emotions, trust, grudges).
+- **Reaction previews**: play any gesture and sound (each emotion, mixed, unsure, surprise, entry arriving, soothe, puzzled, wake, birth) without a model and without changing the mood.
 
 ## Adding a new provider
 
@@ -254,7 +289,7 @@ export default factory;
 
 ## Privacy and offline use
 
-- No cloud APIs, analytics, telemetry or CDN assets. Three.js and the Nunito font are installed from npm and bundled.
+- No cloud APIs, analytics, telemetry or CDN assets. Three.js and the Nunito font are installed from npm and bundled, and all sounds are synthesized in the browser (no audio files).
 - The server binds to `127.0.0.1` and only calls `OLLAMA_URL`, which must be local. Cloud models are refused by tag (`:cloud`, `-cloud`) and by the remote host Ollama reports for them.
 - After `npm install` (and pulling a model), the app works with the network disconnected.
 
@@ -268,13 +303,14 @@ npm test
 npm run typecheck
 ```
 
-Unit tests cover the mood engine (decay, trust, grudges, reactions, temperament), the state builder (budget trimming, field selection), response parsing, the Ollama provider's checks against a fake local server, the mock provider and the catalog.
+Unit tests cover the mood engine (decay, trust, grudges, reactions, temperament), the state builder (budget trimming, field selection), response parsing, the Ollama provider's checks against a fake local server, the mock provider, the catalog, the gesture curves (they start and end at rest with no jumps) and the voices (fixed per seed, different between blobs).
 
 ## Project layout
 
 ```
 client/            Vite + TypeScript + Three.js front end
-  src/blob/        shader, live blob view, thumbnails
+  src/blob/        shader, live blob view, gestures, thumbnails
+  src/audio/       synthesized sounds and per-blob voices
   src/ui/          journal, settings, debug panel
 server/            Hono + better-sqlite3 back end
   decision/        DecisionProvider interface, questions, parsing, state builder, catalog

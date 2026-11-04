@@ -3,8 +3,10 @@ import '@fontsource/nunito/600.css';
 import '@fontsource/nunito/700.css';
 import './styles.css';
 
-import type { ProviderStatus } from '../../shared/types';
-import { api, type BlobInfo, type StateResponse, type TickResponse, type WellbeingCard } from './api';
+import { EMOTIONS, type Emotion, type ProviderStatus } from '../../shared/types';
+import { api, type BlobInfo, type MessageResponse, type MoodSummary, type StateResponse, type TickResponse, type WellbeingCard } from './api';
+import { SoundEngine } from './audio/SoundEngine';
+import { voiceFromTemperament, type MoodTone } from './audio/voice';
 import { BlobView } from './blob/BlobView';
 import { Thumbnailer } from './blob/Thumbnailer';
 import { createDebug } from './ui/debug';
@@ -16,6 +18,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 const TICK_READY_MS = 60_000;
 const TICK_WAITING_MS = 8_000;
+
+const toneOf = (m: MoodSummary): MoodTone => ({ valence: m.valence, arousal: m.arousal, trust: m.trust, clarity: m.clarity });
 
 async function boot() {
   const stage = $('stage');
@@ -45,6 +49,55 @@ async function boot() {
 
   const view = new BlobView(stage, blob.temperament.seed);
   const thumbs = new Thumbnailer();
+  const sound = new SoundEngine(voiceFromTemperament(blob.temperament));
+  sound.setMood(toneOf(initial.mood));
+
+  // Sounds for moments the blob itself notices: birth, being poked, an entry arriving, waking up.
+  view.onEvent = (e) => {
+    if (e.type === 'birth-start') sound.play('birth');
+    else if (e.type === 'birth-pop') sound.play('pop');
+    else if (e.type === 'absorb') sound.play('absorb');
+    else if (e.type === 'wake') sound.play('wake', { delay: 0.4 });
+    else if (e.type === 'poke') sound.play('poke', { pan: e.pan * 0.6, variant: 0.9 + Math.random() * 0.22 });
+  };
+
+  // Sound toggle in the top bar.
+  const soundBtn = $<HTMLButtonElement>('btn-sound');
+  const showSound = () => {
+    soundBtn.textContent = sound.enabled ? 'Sound on' : 'Sound off';
+    soundBtn.setAttribute('aria-pressed', String(sound.enabled));
+  };
+  soundBtn.addEventListener('click', () => sound.setEnabled(!sound.enabled));
+  sound.onChange(showSound);
+  showSound();
+
+  /** The blob's reaction to an answered entry: a gesture and a sound for its strongest feeling. */
+  function react(r: MessageResponse) {
+    sound.setMood(toneOf(r.mood));
+    const s = r.entry.signals;
+    if (r.distress) {
+      view.soothe();
+      sound.play('soothe');
+      return;
+    }
+    if (!s) {
+      if (r.entry.skipped === 'language') {
+        view.puzzled();
+        sound.play('puzzled', { clarity: 0.3 });
+      }
+      return;
+    }
+    const ranked = [...EMOTIONS].sort((a, b) => s.blobReaction[b] - s.blobReaction[a]) as Emotion[];
+    const opts = { intensity: s.userIntensity, second: ranked[1], mixed: r.mood.mixedness, clarity: s.blobReactionConfidence };
+    view.react(ranked[0], opts);
+    sound.play(ranked[0], opts);
+    if (r.pulse) {
+      window.setTimeout(() => {
+        view.pulse();
+        sound.play('pulse');
+      }, 450);
+    }
+  }
 
   // Tint the page glow with the blob's color (throttled).
   let lastGlow = 0;
@@ -86,6 +139,7 @@ async function boot() {
     serverOffset = t.now - Date.now();
     clockOffset = t.clockOffsetMs;
     if (!pending) view.setTarget(t.visual);
+    sound.setMood(toneOf(t.mood));
     applyStatus(t.status);
     debug.showMood(t.mood, clockOffset);
     // Only after time jumps (debug fast-forward): a periodic refresh would reset the journal's scroll.
@@ -125,12 +179,15 @@ async function boot() {
 
   // ---- Panels ----
   const journal = createJournal($('journal'), { thumbs, temperament: () => blob.temperament, serverNow: () => Date.now() + serverOffset });
-  const settings = createSettings($('settings'), { blob: () => blob, wellbeing: () => wellbeing, onStatus: applyStatus });
+  const settings = createSettings($('settings'), { blob: () => blob, wellbeing: () => wellbeing, onStatus: applyStatus, sound });
   const debug = createDebug($('debug'), {
     view,
+    sound,
     onTick: (t) => onTick(t, true),
     onRebirth: (s) => {
       blob = s.blob;
+      sound.setVoice(voiceFromTemperament(s.blob.temperament));
+      sound.setMood(toneOf(s.mood));
       view.setTarget(s.visual, { immediate: true });
       void view.playBirth();
       onTick(s, true);
@@ -154,7 +211,10 @@ async function boot() {
     textarea.style.height = 'auto';
     textarea.style.height = `${textarea.scrollHeight}px`;
   };
-  textarea.addEventListener('input', autosize);
+  textarea.addEventListener('input', () => {
+    autosize();
+    view.notifyTyping();
+  });
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -168,14 +228,18 @@ async function boot() {
     if (!text || pending) return;
     pending = true;
     send.disabled = true;
-    view.setListening(true);
     showNotice(null);
+    // The entry flows from the text box into the blob as light; it listens while the model reads.
+    const box = textarea.getBoundingClientRect();
+    const arrived = view.absorb(box.left + box.width / 2, box.top + box.height / 2);
+    void arrived.then(() => pending && view.setListening(true));
     try {
       const r = await api.message(text);
       textarea.value = '';
       autosize();
+      await arrived;
       view.setTarget(r.visual);
-      if (r.pulse) view.pulse();
+      react(r);
       if (r.distress && r.wellbeing) showWellbeing(r.wellbeing);
       showNotice(r.notice, r.hint);
       applyStatus(r.status);
