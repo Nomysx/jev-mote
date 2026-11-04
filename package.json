@@ -1,0 +1,39 @@
+{
+  "name": "mote",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mote: a fully local emotional journaling companion. A clay-like blob that reacts to your journal entries with shape and color, driven by a local decision model.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c magenta,cyan \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch --clear-screen=false server/index.ts",
+    "dev:client": "vite",
+    "build": "vite build",
+    "start": "cross-env NODE_ENV=production tsx server/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fontsource/nunito": "^5.3.0",
+    "@hono/node-server": "^2.1.6",
+    "better-sqlite3": "^13.0.3",
+    "cross-env": "^10.1.0",
+    "dotenv": "^18.0.9",
+    "hono": "^4.13.16",
+    "three": "^0.187.0",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.19.0",
+    "@types/three": "^0.187.0",
+    "concurrently": "^10.0.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  }
+}

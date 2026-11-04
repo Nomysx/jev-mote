@@ -1,0 +1,5 @@
+{
+  "$comment": "Per-question settings. For yes/no questions, askAs can be \"noul\" or \"choice\". Some models answer noul questions with a bias toward \"no\"; \"choice\" asks the same question as a two-option choice with neutral keys (a = yes, b = no).",
+  "surprising": { "askAs": "noul" },
+  "distress_flag": { "askAs": "choice" }
+}

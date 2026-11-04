@@ -1,0 +1,537 @@
+{
+  "$comment": "Decision-model catalog, checked against each model's page at ollama.com/library/<name> in November 2026. maxStateTokens is Mote's budget for the state object (the questions need room too); it is derived from each model's documented context limit. minOllama is the version stated on the model page, or the /v1/systemone API minimum (0.35.0) where the page states none; at runtime Mote also enforces the `requires` version Ollama reports for the installed package.",
+  "defaults": {
+    "maxStateTokens": 1500,
+    "maxRecentMessages": 8,
+    "recentMessageMaxChars": 600,
+    "minOllama": "0.35.0"
+  },
+  "presets": [
+    {
+      "id": "lite",
+      "label": "Lite",
+      "hardware": "Old laptops, CPU only",
+      "models": [
+        {
+          "model": "laya",
+          "when": "English"
+        },
+        {
+          "model": "laya:322m-multilingual-bf16",
+          "when": "Other languages"
+        }
+      ]
+    },
+    {
+      "id": "balanced",
+      "label": "Balanced",
+      "hardware": "16 GB RAM (default)",
+      "models": [
+        {
+          "model": "tev1",
+          "when": "Default"
+        }
+      ]
+    },
+    {
+      "id": "best",
+      "label": "Best",
+      "hardware": "32 GB+ RAM or a good GPU",
+      "models": [
+        {
+          "model": "nimble",
+          "when": "Highest accuracy"
+        }
+      ]
+    }
+  ],
+  "models": [
+    {
+      "name": "laya",
+      "aliases": [
+        "laya:latest",
+        "laya:421m-english-bf16",
+        "laya:421m-english-mlx-fp16",
+        "laya:421m-typed-decisions-bf16",
+        "laya:421m-typed-decisions-mlx-fp16"
+      ],
+      "publisher": "Convai Innovations",
+      "parameters": "421M",
+      "downloadSize": "~845 MB",
+      "inputTypes": [
+        "text"
+      ],
+      "languages": [
+        "English"
+      ],
+      "englishOnly": true,
+      "minOllama": "0.40.0",
+      "minOllamaSource": "model page",
+      "contextNote": "Each question gets a 512-token budget covering state, instructions and options together; longer states are truncated.",
+      "maxStateTokens": 300,
+      "maxRecentMessages": 0,
+      "recentMessageMaxChars": 140,
+      "compactState": true,
+      "license": "Apache 2.0",
+      "tier": "lite",
+      "notes": "Strong on emotion and tone (90.6% on Convai's in-task emotion and tone set). Fine-tuned from ModernBERT-large.",
+      "cloudTags": [],
+      "stateFields": [
+        "current_mood"
+      ],
+      "moodStyle": "numbers",
+      "testNotes": "Tested with Mote's questions: Laya mixes every word in the state into every answer (with a worded mood or the temperament in the state, a sad entry read as 'calm' or 'curious'). Mote therefore sends only new_message and a numbers-only mood; temperament, grudges and history are applied by the mood engine in code."
+    },
+    {
+      "name": "laya:322m-multilingual-bf16",
+      "aliases": [
+        "laya:322m-multilingual-mlx-fp16"
+      ],
+      "publisher": "Convai Innovations",
+      "parameters": "322M",
+      "downloadSize": "~658 MB",
+      "inputTypes": [
+        "text"
+      ],
+      "languages": [
+        "100+ languages"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.40.0",
+      "minOllamaSource": "model page",
+      "contextNote": "mmBERT-base checkpoint with a 1,024-token window (the MLX tag lists a 1K context).",
+      "maxStateTokens": 650,
+      "maxRecentMessages": 0,
+      "recentMessageMaxChars": 160,
+      "compactState": true,
+      "license": "Apache 2.0 (as stated on the laya model page)",
+      "tier": "lite",
+      "notes": "Multilingual variant for non-English writing on low-end machines.",
+      "cloudTags": [],
+      "stateFields": [
+        "current_mood"
+      ],
+      "moodStyle": "numbers",
+      "testNotes": "Tested with Mote's questions: Laya mixes every word in the state into every answer (with a worded mood or the temperament in the state, a sad entry read as 'calm' or 'curious'). Mote therefore sends only new_message and a numbers-only mood; temperament, grudges and history are applied by the mood engine in code."
+    },
+    {
+      "name": "tev1:0.8b",
+      "aliases": [],
+      "publisher": "Together AI",
+      "parameters": "0.8B",
+      "downloadSize": "~834 MB (up to 1.5 GB depending on format)",
+      "inputTypes": [
+        "text"
+      ],
+      "languages": [
+        "English (other languages untested by Together AI)"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.35.0",
+      "minOllamaSource": "model page",
+      "contextNote": "Runs with a context of about 2,000 tokens; the longest training example is about 1,500 tokens. Every question is scored with the full state.",
+      "maxStateTokens": 700,
+      "maxRecentMessages": 6,
+      "recentMessageMaxChars": 400,
+      "compactState": false,
+      "license": "Experimental. Dataset builders and training scripts are MIT; the weights license is still being finalized.",
+      "tier": "lite",
+      "notes": "Experimental. Fine-tuned from Qwen3.5 0.8B.",
+      "cloudTags": []
+    },
+    {
+      "name": "tev1",
+      "aliases": [
+        "tev1:latest",
+        "tev1:4b"
+      ],
+      "publisher": "Together AI",
+      "parameters": "4B",
+      "downloadSize": "~4.5 GB",
+      "inputTypes": [
+        "text"
+      ],
+      "languages": [
+        "English (other languages untested by Together AI)"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.35.0",
+      "minOllamaSource": "model page",
+      "contextNote": "Runs with a context of about 2,000 tokens; the longest training example is about 1,500 tokens. Every question is scored with the full state.",
+      "maxStateTokens": 700,
+      "maxRecentMessages": 6,
+      "recentMessageMaxChars": 400,
+      "compactState": false,
+      "license": "Experimental. Dataset builders and training scripts are MIT; the weights license is still being finalized.",
+      "tier": "balanced",
+      "notes": "Experimental. Fine-tuned from Qwen3.5 4B. The more accurate of the two Tev1 sizes.",
+      "cloudTags": []
+    },
+    {
+      "name": "nimble",
+      "aliases": [
+        "nimble:latest",
+        "nimble:9b",
+        "nimble:9b-q8_0"
+      ],
+      "publisher": "Bespoke Labs",
+      "parameters": "9B",
+      "downloadSize": "~9.5 GB",
+      "inputTypes": [
+        "text"
+      ],
+      "languages": [
+        "Not stated (benchmarks include German routing)"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.35.0",
+      "minOllamaSource": "api minimum",
+      "contextNote": "The full state and question set must fit in an 8,192-token context; shorter prompts are better tested.",
+      "maxStateTokens": 3500,
+      "maxRecentMessages": 16,
+      "recentMessageMaxChars": 800,
+      "compactState": false,
+      "license": "Apache 2.0",
+      "tier": "best",
+      "notes": "Highest accuracy of the launch models, close to Jev 1.13 on Bespoke's 13-dataset benchmark.",
+      "cloudTags": []
+    },
+    {
+      "name": "nimble-v3",
+      "aliases": [
+        "nimble-v3:latest",
+        "nimble-v3:9b-q8_0",
+        "nimble-v3:9b-q4_K_M",
+        "nimble-v3:9b-bf16",
+        "nimble-v3:9b-mxfp8",
+        "nimble-v3:9b-nvfp4",
+        "nimble-v3:9b-mlx-bf16"
+      ],
+      "publisher": "Bespoke Labs",
+      "parameters": "9B",
+      "downloadSize": "~9.5 GB (5.6 to 17.9 GB depending on format)",
+      "inputTypes": [
+        "text"
+      ],
+      "languages": [
+        "Not stated"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.40.4",
+      "minOllamaSource": "model page",
+      "contextNote": "32K text context (32,768 tokens including the formatted questions).",
+      "maxStateTokens": 6000,
+      "maxRecentMessages": 20,
+      "recentMessageMaxChars": 1000,
+      "compactState": false,
+      "license": "CC BY-NC 4.0: noncommercial use only (Qwen3.5-9B base is Apache 2.0). Check before shipping commercially.",
+      "tier": "best",
+      "notes": "Newer Nimble release.",
+      "cloudTags": []
+    },
+    {
+      "name": "d3:2b",
+      "aliases": [],
+      "publisher": "vLLM Semantic Router",
+      "parameters": "2B",
+      "downloadSize": "~3.1 GB",
+      "inputTypes": [
+        "text",
+        "image"
+      ],
+      "languages": [
+        "Not stated"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.40.9",
+      "minOllamaSource": "model page",
+      "contextNote": "Ollama packages use a 4,096-token context.",
+      "maxStateTokens": 1800,
+      "maxRecentMessages": 8,
+      "recentMessageMaxChars": 500,
+      "compactState": false,
+      "license": "Apache 2.0",
+      "tier": "lite",
+      "notes": "Fast local routing and classification. Recommended for 8 GB machines.",
+      "cloudTags": []
+    },
+    {
+      "name": "d3",
+      "aliases": [
+        "d3:latest",
+        "d3:4b"
+      ],
+      "publisher": "vLLM Semantic Router",
+      "parameters": "4B",
+      "downloadSize": "~5.6 GB",
+      "inputTypes": [
+        "text",
+        "image"
+      ],
+      "languages": [
+        "Not stated"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.40.9",
+      "minOllamaSource": "model page",
+      "contextNote": "Ollama packages use a 4,096-token context.",
+      "maxStateTokens": 1800,
+      "maxRecentMessages": 8,
+      "recentMessageMaxChars": 500,
+      "compactState": false,
+      "license": "Apache 2.0",
+      "tier": "balanced",
+      "notes": "General use, a good starting point on a 16 GB machine.",
+      "cloudTags": []
+    },
+    {
+      "name": "d3:9b",
+      "aliases": [],
+      "publisher": "vLLM Semantic Router",
+      "parameters": "9B",
+      "downloadSize": "~10 GB",
+      "inputTypes": [
+        "text",
+        "image"
+      ],
+      "languages": [
+        "Not stated"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.40.9",
+      "minOllamaSource": "model page",
+      "contextNote": "Ollama packages use a 4,096-token context.",
+      "maxStateTokens": 1800,
+      "maxRecentMessages": 8,
+      "recentMessageMaxChars": 500,
+      "compactState": false,
+      "license": "Apache 2.0",
+      "tier": "best",
+      "notes": "Harder decisions; recommended for 32 GB machines.",
+      "cloudTags": []
+    },
+    {
+      "name": "d3:27b",
+      "aliases": [],
+      "publisher": "vLLM Semantic Router",
+      "parameters": "27B",
+      "downloadSize": "~29 GB",
+      "inputTypes": [
+        "text",
+        "image"
+      ],
+      "languages": [
+        "Not stated"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.40.9",
+      "minOllamaSource": "model page",
+      "contextNote": "Ollama packages use a 4,096-token context.",
+      "maxStateTokens": 1800,
+      "maxRecentMessages": 8,
+      "recentMessageMaxChars": 500,
+      "compactState": false,
+      "license": "Apache 2.0",
+      "tier": "best",
+      "notes": "Highest accuracy in the publisher's family evaluation; recommended for 64 GB machines.",
+      "cloudTags": []
+    },
+    {
+      "name": "d1",
+      "aliases": [
+        "d1:latest",
+        "d1:3b",
+        "d1:2b"
+      ],
+      "publisher": "Liquid AI",
+      "parameters": "3B (2B tag also listed)",
+      "downloadSize": "~3.7 to 3.9 GB",
+      "inputTypes": [
+        "text",
+        "image"
+      ],
+      "languages": [
+        "Arabic",
+        "Chinese",
+        "English",
+        "French",
+        "German",
+        "Hindi",
+        "Indonesian",
+        "Italian",
+        "Japanese",
+        "Korean",
+        "Polish",
+        "Portuguese",
+        "Russian",
+        "Spanish",
+        "Thai",
+        "Vietnamese"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.35.0",
+      "minOllamaSource": "api minimum",
+      "contextNote": "32K context window (125K on one tag).",
+      "maxStateTokens": 4000,
+      "maxRecentMessages": 16,
+      "recentMessageMaxChars": 800,
+      "compactState": false,
+      "license": "LFM Open License v1.0",
+      "tier": "balanced",
+      "notes": "Built on LFM2.5-VL-3B. Multilingual.",
+      "cloudTags": []
+    },
+    {
+      "name": "d1-omni",
+      "aliases": [
+        "d1-omni:latest",
+        "d1-omni:600m",
+        "d1-omni:2b"
+      ],
+      "publisher": "Liquid AI",
+      "parameters": "600M / 2B",
+      "downloadSize": "~850 MB (600M) / ~4.4 GB (2B)",
+      "inputTypes": [
+        "text",
+        "image",
+        "audio"
+      ],
+      "languages": [
+        "Not stated for text (speech: English)"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.35.0",
+      "minOllamaSource": "api minimum",
+      "contextNote": "125K context window; trained with up to 896 tokens of text alongside images, so keep states short.",
+      "maxStateTokens": 800,
+      "maxRecentMessages": 4,
+      "recentMessageMaxChars": 300,
+      "compactState": true,
+      "license": "LFM Open License v1.0",
+      "tier": "lite",
+      "notes": "Edge-sized; built on LFM2.5-Encoder-350M.",
+      "cloudTags": []
+    },
+    {
+      "name": "pplx-decider-flash",
+      "aliases": [
+        "pplx-decider-flash:latest"
+      ],
+      "publisher": "Perplexity",
+      "parameters": "4B",
+      "downloadSize": "~5.6 GB",
+      "inputTypes": [
+        "text",
+        "image"
+      ],
+      "languages": [
+        "Not stated"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.35.0",
+      "minOllamaSource": "api minimum",
+      "contextNote": "256K context window listed.",
+      "maxStateTokens": 4000,
+      "maxRecentMessages": 16,
+      "recentMessageMaxChars": 800,
+      "compactState": false,
+      "license": "Apache 2.0",
+      "tier": "balanced",
+      "notes": "Built on Qwen3.5-4B, distilled from pplx-decider.",
+      "cloudTags": []
+    },
+    {
+      "name": "kev",
+      "aliases": [
+        "kev:latest",
+        "kev:9b-nvfp4",
+        "kev:9b-q4_K_M",
+        "kev:9b-q8_0",
+        "kev:9b-bf16",
+        "kev:9b-mlx-bf16"
+      ],
+      "publisher": "Jared Palmer",
+      "parameters": "9B (default; 0.8B, 4B and 27B tags also available)",
+      "downloadSize": "~5.6 to 6.7 GB (kev:latest); 812 MB to 51 GB across tags",
+      "inputTypes": [
+        "text"
+      ],
+      "languages": [
+        "English-focused evaluations"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.40.4",
+      "minOllamaSource": "model page",
+      "contextNote": "Tag num_ctx is 73,728 tokens; large inputs are slower and less tested.",
+      "maxStateTokens": 4000,
+      "maxRecentMessages": 16,
+      "recentMessageMaxChars": 800,
+      "compactState": false,
+      "license": "Apache 2.0 (publisher and base-model licenses)",
+      "tier": "best",
+      "notes": "Several tags use the Apple Silicon MLX runner. 0.8B tags fit tight memory budgets.",
+      "cloudTags": []
+    },
+    {
+      "name": "clef-flash",
+      "aliases": [
+        "clef-flash:latest",
+        "clef-flash:9b"
+      ],
+      "publisher": "Cloudflare",
+      "parameters": "9B",
+      "downloadSize": "~11 to 12 GB",
+      "inputTypes": [
+        "text",
+        "image"
+      ],
+      "languages": [
+        "Not stated"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.35.1",
+      "minOllamaSource": "model page",
+      "contextNote": "64K context window.",
+      "maxStateTokens": 6000,
+      "maxRecentMessages": 20,
+      "recentMessageMaxChars": 1000,
+      "compactState": false,
+      "license": "Apache 2.0",
+      "tier": "best",
+      "notes": "Fine-tuned from Qwen3.5-9B. Lowest latency in Cloudflare's Decision Index runs.",
+      "cloudTags": []
+    },
+    {
+      "name": "clef",
+      "aliases": [
+        "clef:latest",
+        "clef:27b"
+      ],
+      "publisher": "Cloudflare",
+      "parameters": "27B",
+      "downloadSize": "~18 to 20 GB",
+      "inputTypes": [
+        "text",
+        "image"
+      ],
+      "languages": [
+        "Not stated"
+      ],
+      "englishOnly": false,
+      "minOllama": "0.35.1",
+      "minOllamaSource": "model page",
+      "contextNote": "64K context window.",
+      "maxStateTokens": 6000,
+      "maxRecentMessages": 20,
+      "recentMessageMaxChars": 1000,
+      "compactState": false,
+      "license": "Apache 2.0",
+      "tier": "best",
+      "notes": "Fine-tuned from Qwen3.8-27B. Also has cloud variants (clef:cloud, clef:27b-cloud): Mote only uses the local model.",
+      "cloudTags": [
+        "clef:cloud",
+        "clef:27b-cloud"
+      ]
+    }
+  ]
+}

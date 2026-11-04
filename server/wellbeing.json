@@ -1,0 +1,11 @@
+{
+  "$comment": "Shown as plain text (works offline) when distress_flag comes back with reasonable probability. Edit freely for your region.",
+  "title": "You don't have to carry this alone",
+  "body": "It sounds like things might be really heavy right now. If you're in crisis or thinking about hurting yourself, talking to someone can help.",
+  "lines": [
+    { "label": "United States", "text": "Call or text 988 (Suicide & Crisis Lifeline)" },
+    { "label": "Anywhere", "text": "findahelpline.com lists free, confidential helplines by country" },
+    { "label": "Emergency", "text": "If you are in immediate danger, call your local emergency number" }
+  ],
+  "note": "Mote is a simple program and can misread things. If this doesn't fit, just close this card."
+}

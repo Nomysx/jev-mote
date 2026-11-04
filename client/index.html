@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Mote</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='34' r='22' fill='%23e8a87c'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="stage" aria-hidden="true"></div>
+      <div id="status" class="status-card" hidden></div>
+      <header class="top-bar">
+        <span class="brand">Mote</span>
+        <nav>
+          <button type="button" class="icon-btn" id="btn-journal" aria-label="Journal">Journal</button>
+          <button type="button" class="icon-btn" id="btn-settings" aria-label="Settings">Settings</button>
+          <button type="button" class="icon-btn" id="btn-debug" aria-label="Debug panel" hidden>Debug</button>
+        </nav>
+      </header>
+      <div id="wellbeing" class="wellbeing" hidden></div>
+      <form id="composer" class="composer" autocomplete="off">
+        <div id="notice" class="notice" role="status" aria-live="polite"></div>
+        <div class="composer-box">
+          <textarea id="entry" rows="1" maxlength="20000" placeholder="Write to Mote…" aria-label="Journal entry"></textarea>
+          <button type="submit" id="send" class="send-btn" aria-label="Save entry">Save</button>
+        </div>
+        <p class="composer-hint">Enter to save · Shift+Enter for a new line</p>
+      </form>
+      <aside id="journal" class="panel panel-left" hidden aria-label="Journal"></aside>
+      <aside id="settings" class="panel panel-right" hidden aria-label="Settings"></aside>
+      <aside id="debug" class="debug-panel" hidden aria-label="Debug panel"></aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
