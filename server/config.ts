@@ -10,7 +10,8 @@ export interface AppConfig {
   decisionProvider: string;
   ollamaUrl: string;
   decisionModel: string;
-  keepAlive: string;
+  /** Sent to Ollama as keep_alive: a duration like "30m", or seconds as a number (-1 = keep loaded). */
+  keepAlive: string | number;
   decisionTimeoutMs: number;
   host: string;
   port: number;
@@ -22,6 +23,17 @@ export interface AppConfig {
 const bool = (v: string | undefined, fallback: boolean) =>
   v === undefined || v === '' ? fallback : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase());
 
+/**
+ * OLLAMA_KEEP_ALIVE in any form Ollama itself accepts: a duration ("30m", "24h", "-1m") or a bare
+ * number of seconds ("-1" keeps the model loaded, "0" unloads it). Ollama's API rejects a bare
+ * number sent as text ("time: missing unit in duration"), so numbers are sent as numbers.
+ */
+export function parseKeepAlive(raw: string | undefined): string | number {
+  const v = (raw ?? '').trim();
+  if (!v) return '30m';
+  return /^[+-]?\d+(\.\d+)?$/.test(v) ? Number(v) : v;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const production = env.NODE_ENV === 'production';
   const dbPath = env.MOTE_DB_PATH || path.join(ROOT_DIR, 'data', 'mote.sqlite');
@@ -29,7 +41,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     decisionProvider: (env.DECISION_PROVIDER || 'ollama').trim().toLowerCase(),
     ollamaUrl: (env.OLLAMA_URL || 'http://localhost:11434').trim().replace(/\/+$/, ''),
     decisionModel: (env.DECISION_MODEL || 'tev1').trim(),
-    keepAlive: (env.OLLAMA_KEEP_ALIVE || '30m').trim(),
+    keepAlive: parseKeepAlive(env.OLLAMA_KEEP_ALIVE),
     decisionTimeoutMs: Number(env.DECISION_TIMEOUT_MS) > 0 ? Number(env.DECISION_TIMEOUT_MS) : 300_000,
     host: env.MOTE_HOST || '127.0.0.1',
     port: Number(env.MOTE_PORT) > 0 ? Number(env.MOTE_PORT) : 5174,

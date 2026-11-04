@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { checkLocalUrl, loadConfig } from '../server/config';
+import { checkLocalUrl, loadConfig, parseKeepAlive } from '../server/config';
 import { Catalog } from '../server/decision/catalog';
 import ollama from '../server/decision/providers/ollama';
 import { buildQuestions } from '../server/decision/questions';
@@ -87,8 +87,8 @@ beforeEach(() => {
   };
 });
 
-function provider(model: string, ollamaUrl = url) {
-  const config = { ...loadConfig({}), ollamaUrl, keepAlive: '7m', decisionTimeoutMs: 3000 };
+function provider(model: string, ollamaUrl = url, keepAlive: string | number = '7m') {
+  const config = { ...loadConfig({}), ollamaUrl, keepAlive, decisionTimeoutMs: 3000 };
   return ollama.create({ config, catalog: new Catalog(), log: () => undefined }, model);
 }
 
@@ -163,6 +163,17 @@ describe('ollama provider: asking', () => {
     expect(lastBody).toMatchObject({ model: 'laya', state: { new_message: 'hi' }, keep_alive: '7m' });
     expect(Object.keys(lastBody!.questions as object)).toEqual(Object.keys(qs));
     expect(r.answers.user_emotion).toMatchObject({ choice: 'joy' });
+  });
+
+  it('sends OLLAMA_KEEP_ALIVE in a form Ollama accepts (numbers as numbers)', async () => {
+    expect(parseKeepAlive(undefined)).toBe('30m');
+    expect(parseKeepAlive(' 30m ')).toBe('30m');
+    expect(parseKeepAlive('-1m')).toBe('-1m');
+    expect(parseKeepAlive('-1')).toBe(-1);
+    expect(parseKeepAlive('3600')).toBe(3600);
+    expect(loadConfig({ OLLAMA_KEEP_ALIVE: '-1' }).keepAlive).toBe(-1);
+    await provider('laya', url, parseKeepAlive('-1')).ask('x', buildQuestions());
+    expect(lastBody!.keep_alive).toBe(-1);
   });
 
   it('maps a missing model, a context overflow and running out of memory to clear errors', async () => {
