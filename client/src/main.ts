@@ -67,7 +67,6 @@ async function boot() {
   const wellbeingEl = $('wellbeing');
   const form = $<HTMLFormElement>('composer');
   const textarea = $<HTMLTextAreaElement>('entry');
-  const send = $<HTMLButtonElement>('send');
   const dreamOffer = $<HTMLButtonElement>('dream-offer');
   document.body.classList.add(`mode-${viewMode}`);
   if (desktop) document.body.classList.add('desktop');
@@ -648,7 +647,6 @@ async function boot() {
     const text = textarea.value.trim();
     if (!text || pending) return;
     pending = true;
-    send.disabled = true;
     showNotice(null);
     mind.notifyActivity();
     layer.cancel();
@@ -680,7 +678,6 @@ async function boot() {
       showNotice(`Couldn’t save that: ${(err as Error).message}. Your text is still here.`);
     } finally {
       pending = false;
-      send.disabled = false;
       view.setListening(false);
       textarea.focus();
     }

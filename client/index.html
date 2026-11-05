@@ -13,7 +13,6 @@
       <div id="mind" class="mind-layer" aria-hidden="true"></div>
       <div id="status" class="status-card" hidden></div>
       <header class="top-bar">
-        <span class="brand">Mote</span>
         <nav>
           <button type="button" class="icon-btn" id="btn-sound" aria-pressed="true" title="Sound">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" /><path class="wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" /></svg>
@@ -50,10 +49,8 @@
         <button type="button" id="dream-offer" class="dream-offer" hidden>Mote had a dream. Watch it</button>
         <div id="notice" class="notice" role="status" aria-live="polite"></div>
         <div class="composer-box">
-          <textarea id="entry" rows="1" maxlength="20000" placeholder="Write to Mote…" aria-label="Journal entry"></textarea>
-          <button type="submit" id="send" class="send-btn" aria-label="Save entry">Save</button>
+          <textarea id="entry" rows="1" maxlength="20000" placeholder="Write to Mote…" aria-label="Journal entry (press Enter to save)" enterkeyhint="send"></textarea>
         </div>
-        <p class="composer-hint">Press Enter to save. Shift+Enter starts a new line.</p>
       </form>
       <aside id="journal" class="panel panel-left" hidden aria-label="Journal"></aside>
       <aside id="settings" class="panel panel-right" hidden aria-label="Settings"></aside>
