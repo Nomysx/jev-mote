@@ -106,6 +106,11 @@ export interface LifeState {
   lastSeenAt: number;
   /** Last time the writer did something (typed, wrote, poked). It never falls asleep right after. */
   lastActiveAt: number;
+  /**
+   * Last time the writer used this computer (keyboard or mouse anywhere), when they let Mote notice
+   * (server/senses). Older states and Motes that don't notice don't have it.
+   */
+  lastNearAt?: number | null;
   /** When it next thinks on its own while nobody is watching. */
   nextAwayThinkAt: number;
   updatedAt: number;
@@ -171,6 +176,37 @@ export interface LifeView {
   words: string;
   /** Lets it think, sleep-dream and live on its own (a server setting). */
   background: boolean;
+  /** It noticed you're away from the computer (only if you let it notice): an open window isn't watching. */
+  writerAway?: boolean;
+}
+
+/** Your daily rhythm, as Mote has learned it from when you're at the computer (server/senses/rhythm.ts). */
+export interface Rhythm {
+  /** Finished days of the last two weeks it learned from. */
+  days: number;
+  /** 0..1: how far Mote has adapted to you (grows with the days it knows you). */
+  confidence: number;
+  /** Your usual night (the quietest hours of the day), local hours; null until it is clear. */
+  night: { from: number; to: number } | null;
+  /** How many hours later (+) or earlier (-) than by nature Mote's body clock now runs. */
+  shiftHours: number;
+  /** 24 values, 0..1: how much of each hour you're usually at the computer. */
+  hours: number[];
+}
+
+/** What Mote notices about you, for settings. */
+export interface SensesView {
+  /** This app can notice you at the computer (the desktop app on Windows or macOS). */
+  available: boolean;
+  /** You let it notice (off unless you turn it on). */
+  presence: boolean;
+  /** You're at the computer right now; null while it doesn't notice. */
+  nearby: boolean | null;
+  /** Minutes at the computer today so far. */
+  todayMinutes: number;
+  rhythm: Rhythm;
+  /** When Mote sleeps now: its nature's night, moved toward yours. Local hours. */
+  sleep: { from: number; to: number };
 }
 
 /**

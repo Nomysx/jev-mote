@@ -13,6 +13,7 @@ import type {
   ModelProfile,
   MoodState,
   ProviderStatus,
+  SensesView,
   Temperament,
   Traits,
 } from '../../shared/types';
@@ -208,6 +209,9 @@ export const api = {
   lifeLog: (q: { before?: number; limit?: number } = {}) => call<{ events: LifeEvent[] }>(`/api/life?${query(q)}`),
   character: () => call<CharacterReport>('/api/character'),
   setLifeBackground: (background: boolean) => call<{ background: boolean }>('/api/settings/life', { body: { background } }),
+  senses: () => call<SensesView>('/api/senses'),
+  setPresence: (presence: boolean) => call<SensesView>('/api/settings/senses', { body: { presence } }),
+  forgetRhythm: () => call<SensesView>('/api/senses/forget', { body: {} }),
   setup: () => call<SetupResponse>(`/api/setup?${query({ lang: navigator.language })}`),
   installEngine: () => call<{ ok: boolean }>('/api/setup/engine', { body: { action: 'install' } }),
   startEngine: () => call<{ status: ProviderStatus }>('/api/setup/engine', { body: { action: 'start' } }),

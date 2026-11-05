@@ -10,6 +10,7 @@ import { MoteDb } from './db';
 import { Catalog } from './decision/catalog';
 import { createProvider } from './decision/registry';
 import { LifeLoop } from './life/loop';
+import { Senses, type PresenceSensor } from './senses/presence';
 import { MoteService } from './service';
 import { EngineManager } from './setup/engine';
 import { Setup } from './setup';
@@ -19,6 +20,8 @@ export interface StartOptions {
   log?: (msg: string) => void;
   /** If the port is taken, try up to this many next ones (the desktop app). */
   portTries?: number;
+  /** Lets Mote notice you at the computer, if you turn it on in settings (the desktop app). */
+  presence?: PresenceSensor;
 }
 
 export interface RunningMote {
@@ -46,7 +49,8 @@ export async function startMote(opts: StartOptions = {}): Promise<RunningMote> {
 
   const model = db.getSetting(`model:${config.decisionProvider}`) ?? config.decisionModel;
   const provider = await createProvider(config.decisionProvider, { config, catalog, log }, model);
-  const service = new MoteService(db, provider, catalog, config, clock, log);
+  const senses = new Senses(db, clock, opts.presence ?? null, log);
+  const service = new MoteService(db, provider, catalog, config, clock, log, senses);
   const setup = new Setup(engine, provider, service, config, log);
   const app = createApp(service, config, setup);
 
@@ -77,6 +81,10 @@ export async function startMote(opts: StartOptions = {}): Promise<RunningMote> {
   const life = new LifeLoop(service, log);
   life.start();
   log(`[mote] Mote's life is running${service.backgroundOn() ? '' : ' (living on its own is off in settings)'}.`);
+  if (senses.available) {
+    senses.start();
+    log(`[mote] Noticing you at the computer is ${senses.presenceOn() ? 'on' : 'off (Settings → What Mote notices)'}.`);
+  }
 
   const server = bound.server;
   return {
@@ -86,6 +94,7 @@ export async function startMote(opts: StartOptions = {}): Promise<RunningMote> {
     service,
     close: async () => {
       life.stop();
+      senses.stop();
       engine.stop();
       await new Promise<void>((r) => server.close(() => r()));
       db.close();

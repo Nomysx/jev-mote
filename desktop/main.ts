@@ -3,7 +3,7 @@
 // engine. Mote lives in the tray, and shows either as a normal window or as a small widget on your
 // desktop. Data lives in the app's user-data folder; nothing leaves this computer.
 
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, shell, Tray, type Rectangle } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, screen, shell, Tray, type Rectangle } from 'electron';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -238,7 +238,14 @@ async function boot() {
     DECISION_MODEL: process.env.DECISION_MODEL || 'tev1:0.8b',
   });
   const { startMote } = await import('../server/main');
-  const mote = await startMote({ log, portTries: 30 });
+  // Noticing you at the computer (only used if you turn it on in Settings): how long since the
+  // keyboard or mouse was last used anywhere, and whether the screen is locked. Nothing else.
+  // Windows and macOS only: on Linux, idle time isn't reliable everywhere (Wayland).
+  const presence =
+    process.platform === 'win32' || process.platform === 'darwin'
+      ? { sample: () => ({ idleMs: powerMonitor.getSystemIdleTime() * 1000, locked: powerMonitor.getSystemIdleState(1) === 'locked' }) }
+      : undefined;
+  const mote = await startMote({ log, portTries: 30, presence });
   url = mote.url;
   closeMote = mote.close;
   log(`[mote] desktop app ready at ${url} (data in ${dataDir})`);

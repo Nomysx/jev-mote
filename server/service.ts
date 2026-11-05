@@ -21,6 +21,7 @@ import {
   type LifeView,
   type MoodState,
   type ProviderStatus,
+  type SensesView,
   type Signals,
   type SleepCause,
   type Temperament,
@@ -57,6 +58,8 @@ import {
   type Transition,
 } from './life/engine';
 import { buildIdleState, pickMemory } from './mind';
+import type { Senses } from './senses/presence';
+import { learnRhythm, moteSleep } from './senses/rhythm';
 import { applyMessage, applyUnreadable, decay, describeGrudges, describeMood, grudgeTotal, initialMood, relativeTime } from './mood/engine';
 import { describeTemperament, generateTemperament, randomSeed } from './mood/temperament';
 import { TUNING } from './mood/tuning';
@@ -189,9 +192,41 @@ export class MoteService {
     private config: AppConfig,
     private clock: Clock,
     private log: (msg: string) => void = console.log,
+    /** Noticing you at the computer (the desktop app); null in a browser. */
+    private senses: Senses | null = null,
   ) {
     const raw = wellbeingJson as WellbeingCard & { $comment?: string };
     this.wellbeing = { title: raw.title, body: raw.body, lines: raw.lines, note: raw.note };
+  }
+
+  // ---- What Mote notices about you (server/senses) ----
+
+  /** How far its body clock runs behind the wall clock, from the rhythm it learned (0 if none). */
+  private bodyShiftMs(now: number): number {
+    return this.senses?.bodyShiftMs(now) ?? 0;
+  }
+
+  /** The hour of the day as Mote's body feels it. */
+  private bodyHour(now: number): number {
+    return localHour(now - this.bodyShiftMs(now));
+  }
+
+  sensesView(): SensesView {
+    const now = this.clock.now();
+    if (this.senses) return this.senses.view(now);
+    const rhythm = learnRhythm([]);
+    return { available: false, presence: false, nearby: null, todayMinutes: 0, rhythm, sleep: moteSleep(rhythm) };
+  }
+
+  setPresence(on: boolean) {
+    if (!this.senses?.available) throw new Error('noticing needs the desktop app');
+    this.senses.setPresence(on);
+    return this.sensesView();
+  }
+
+  forgetRhythm() {
+    this.senses?.forget();
+    return this.sensesView();
   }
 
   get providerId() {
@@ -317,6 +352,7 @@ export class MoteService {
       unseenDream: unseen ? { id: unseen.id, at: unseen.at } : null,
       words: lifeWords(life, n, dreaming),
       background: this.backgroundOn(),
+      writerAway: this.senses?.nearby(now)?.near === false,
     };
   }
 
@@ -345,7 +381,13 @@ export class MoteService {
       start = initialLife(Math.min(now, blob.lastSeenAt));
       start.lastEntryAt = this.db.listEntries({ blobId: blob.id, limit: 1 })[0]?.createdAt ?? null;
     }
-    const { life, transitions } = advanceLife(start, now, { arousal: mood.arousal });
+    // If it may notice you at the computer: you being nearby is company, and an open Mote window
+    // only counts as you watching it while you're actually at the computer.
+    const near = this.senses?.nearby(now) ?? null;
+    if (near?.at != null) start = { ...start, lastNearAt: Math.max(start.lastNearAt ?? -Infinity, Math.min(now, near.at)) };
+    if (presence && near && !near.near) presence = null;
+    const shift = this.bodyShiftMs(now);
+    const { life, transitions } = advanceLife(start, now, { arousal: mood.arousal, hourAt: (ms) => localHour(ms - shift) });
     this.logTransitions(blob.id, transitions);
     let away: AwayDigest | null = null;
     if (presence) {
@@ -600,6 +642,9 @@ export class MoteService {
     const now = this.clock.now();
     const memory = pickMemory(this.memoryPool(blob.id, now, 14), now, this.recentlyRemembered);
     const character = this.characterFor(blob, now);
+    // Whether you're at the computer (only if it may notice), unless you're watching it right now.
+    const near = this.senses?.nearby(now) ?? null;
+    const watched = now - life.lastSeenAt < LIFE.watchedMs;
     const state = buildIdleState(
       {
         mood: blob.mood,
@@ -610,6 +655,8 @@ export class MoteService {
         body: this.needs(life, blob.mood, now),
         lastThought: life.lastThought,
         character: character.description,
+        bodyShiftMs: this.bodyShiftMs(now),
+        writerNearby: near && !(watched && near.near) ? near.near : null,
       },
       this.provider.profile(),
     );
@@ -639,7 +686,7 @@ export class MoteService {
       const adv = this.advance(b, now2, null);
       const life2 = adv.life;
       const mood2 = applyThought(adv.mood, b.temperament, thought.dist, now2);
-      const hour = localHour(now2);
+      const hour = this.bodyHour(now2);
       const decision = decideIdleAction(action.dist, thought.dist, hour, this.needs(life2, mood2, now2), character.traits);
       const chosen = topKey(decision);
       life2.lastThought = { kind: top, at: now2, memoryId: remembering ? memory!.id : null };
@@ -860,7 +907,7 @@ export class MoteService {
       const { life } = this.advance(blob, now, null);
       if (!life.asleep) {
         life.energy = Math.min(life.energy, 0.3);
-        this.logTransitions(blob.id, [fallAsleep(life, now, circadian(localHour(now)) > 0.1 ? 'night' : 'tired')]);
+        this.logTransitions(blob.id, [fallAsleep(life, now, circadian(this.bodyHour(now)) > 0.1 ? 'night' : 'tired')]);
         this.db.saveBlobState(blob.id, blob.mood, life);
       }
     }).then(() => this.tick());

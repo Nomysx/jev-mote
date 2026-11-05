@@ -1,7 +1,7 @@
 // Settings: Mote's brain (opens setup), your Mote (body, character, temperament), its mind and
 // life, the desktop app, sound, and about.
 
-import type { LifeView, ProviderStatus } from '../../../shared/types';
+import type { LifeView, ProviderStatus, SensesView } from '../../../shared/types';
 import { api, type BlobInfo, type CharacterBrief, type WellbeingCard } from '../api';
 import type { SoundEngine } from '../audio/SoundEngine';
 import { desktop, type DesktopPrefs } from '../desktop';
@@ -35,6 +35,34 @@ const STATE_WORDS: Partial<Record<ProviderStatus['state'], string>> = {
   remote_host: 'The engine must be on this computer',
 };
 
+/** "1:30 AM" or "01:30", in this computer's style, to the nearest quarter hour. */
+const clock = (hours: number) => {
+  const m = (Math.round(hours * 4) * 15) % (24 * 60);
+  return new Date(2000, 0, 1, Math.floor(m / 60), m % 60).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
+
+/** "3 h 20 min", "45 min". */
+const duration = (minutes: number) => {
+  const m = Math.round(minutes);
+  const hrs = Math.floor(m / 60);
+  return hrs ? `${hrs} h${m % 60 ? ` ${m % 60} min` : ''}` : `${m} min`;
+};
+
+function rhythmWords(s: SensesView): string {
+  const r = s.rhythm;
+  if (r.days === 0) return s.presence ? 'It starts learning your rhythm after your first full day.' : 'Turn this on and Mote starts learning your rhythm.';
+  if (!r.night) {
+    return r.confidence === 0 && r.days < 3
+      ? `It has noticed you on ${r.days} full ${r.days === 1 ? 'day' : 'days'} so far. Your rhythm takes a few days to show.`
+      : 'No clear night yet: your days look much the same around the clock, so Mote keeps its own nights.';
+  }
+  const shift = Math.round(r.shiftHours * 4) / 4;
+  const by = duration(Math.abs(shift) * 60);
+  const moved = Math.abs(shift) < 0.25 ? 'about when it would by nature' : `${by} ${shift > 0 ? 'later' : 'earlier'} than by nature`;
+  const learned = r.confidence < 1 ? `, and it is still getting used to you (${Math.round(r.confidence * 100)}%)` : '';
+  return `Your quiet hours: about ${clock(r.night.from)} to ${clock(r.night.to)}. Mote now sleeps about ${clock(s.sleep.from)} to ${clock(s.sleep.to)}, ${moved}${learned}. Learned from the last ${r.days} ${r.days === 1 ? 'day' : 'days'}.`;
+}
+
 function check(id: string, checked: boolean, text: string, onChange: (on: boolean) => void) {
   return h(
     'label',
@@ -53,6 +81,7 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
   );
   let status: ProviderStatus | null = null;
   let prefs: DesktopPrefs | null = null;
+  let senses: SensesView | null = null;
 
   function brainSection() {
     const s = status;
@@ -122,6 +151,71 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
     ];
   }
 
+  function noticeSection() {
+    const s = senses;
+    if (!s?.available) return [];
+    const r = s.rhythm;
+    const setPresence = (on: boolean) =>
+      void api
+        .setPresence(on)
+        .then((v) => (senses = v))
+        .catch(() => undefined)
+        .finally(render);
+    const forget = () => {
+      if (!window.confirm('Forget your daily rhythm? Mote goes back to its own nights.')) return;
+      void api
+        .forgetRhythm()
+        .then((v) => (senses = v))
+        .catch(() => undefined)
+        .finally(render);
+    };
+    const inSleep = (hour: number) => {
+      const { from, to } = s.sleep;
+      const mid = hour + 0.5;
+      return from < to ? mid >= from && mid < to : mid >= from || mid < to;
+    };
+    const peak = Math.max(0.05, ...r.hours);
+    const known = r.days > 0;
+    return [
+      h('h3', {}, 'What Mote notices'),
+      check('s-presence', s.presence, 'Notice when I’m at the computer', setPresence),
+      h(
+        'p',
+        { class: 'faint' },
+        'Mote only checks how long ago the keyboard or mouse was used, and whether the screen is locked: never what you type, which apps you use or what’s on screen. With that it knows you’re nearby (it misses you less, and an open Mote only counts as watched while you’re here), and it learns your daily rhythm: over about two weeks, it moves its nights toward yours. It all stays on this computer.',
+      ),
+      s.presence
+        ? h(
+            'p',
+            { class: 'muted' },
+            s.nearby ? 'Right now you’re at the computer' : 'Right now you’re away from the computer',
+            s.todayMinutes > 0 ? `, ${duration(s.todayMinutes)} so far today.` : '.',
+          )
+        : null,
+      known
+        ? h(
+            'div',
+            { class: 'rhythm-box' },
+            h(
+              'div',
+              { class: 'rhythm', role: 'img', 'aria-label': 'How much you are at the computer in each hour of the day' },
+              r.hours.map((v, hour) =>
+                h('span', {
+                  class: inSleep(hour) ? 'sleep' : '',
+                  style: `height:${Math.max(4, Math.round((v / peak) * 100))}%`,
+                  title: `${clock(hour)}: ${Math.round(v * 60)} min at the computer on a usual day${inSleep(hour) ? ' · Mote sleeps' : ''}`,
+                }),
+              ),
+            ),
+            h('div', { class: 'rhythm-axis faint' }, [0, 6, 12, 18, 24].map((x) => h('span', {}, clock(x % 24)))),
+          )
+        : null,
+      known ? h('p', { class: 'faint' }, 'Bars: how much you’re at the computer in each hour on a usual day. Dim bars: when Mote sleeps now.') : null,
+      h('p', { class: 'muted' }, rhythmWords(s)),
+      known || s.todayMinutes > 0 ? h('div', { class: 'actions' }, h('button', { class: 'link-btn', type: 'button', onclick: forget }, 'Forget my rhythm')) : null,
+    ];
+  }
+
   function desktopSection() {
     if (!desktop || !prefs) return [];
     const set = <K extends keyof DesktopPrefs>(k: K, v: DesktopPrefs[K]) => void desktop!.setPref(k, v).then((p) => (prefs = p));
@@ -177,6 +271,7 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
       h('div', {}, brainSection()),
       h('div', {}, blobSection()),
       h('div', {}, mindSection()),
+      h('div', {}, noticeSection()),
       h('div', {}, desktopSection()),
       h('div', {}, soundSection()),
       h('div', {}, aboutSection()),
@@ -186,9 +281,10 @@ export function createSettings(el: HTMLElement, deps: SettingsDeps) {
   async function load() {
     render();
     try {
-      const [m, p] = await Promise.all([api.models(), desktop ? desktop.getPrefs() : Promise.resolve(null)]);
+      const [m, p, s] = await Promise.all([api.models(), desktop ? desktop.getPrefs() : Promise.resolve(null), api.senses().catch(() => null)]);
       status = m.status;
       prefs = p;
+      senses = s;
       deps.onStatus(m.status);
     } catch {
       /* the brain section says "Checking…" */

@@ -176,6 +176,38 @@ export const TUNING = {
     /** Integration step for long gaps, and the longest gap simulated in full. */
     stepMs: 10 * 60_000,
     maxSimMs: 4 * DAY,
+    /**
+     * Noticing you at the computer (off unless you turn it on, server/senses). With no keyboard or
+     * mouse for this long, or the screen locked, you're away: an open Mote window no longer counts
+     * as you watching it.
+     */
+    awayAfterIdleMs: 10 * 60_000,
+    /** You at the computer, busy with other things, counts like having seen it this long ago: it misses you a little, never a lot. */
+    nearContactLagMs: 2 * HOUR,
+  },
+
+  /**
+   * Your daily rhythm (server/senses/rhythm.ts), learned from when you're at the computer. Mote's
+   * body clock (sleep, waking up, the time of day it feels) moves toward it as it learns.
+   */
+  rhythm: {
+    /** It learns from the last two weeks of finished days. */
+    windowDays: 14,
+    /** A day counts if you were at the computer at least this many minutes. */
+    minDayMinutes: 30,
+    /** It starts adapting after minDays counted days and has fully adapted after fullDays. */
+    minDays: 3,
+    fullDays: 12,
+    /** Your night: the quietest stretch of this many hours (15-minute slots, smoothed over ±1 h). */
+    nightHours: 7,
+    smoothSlots: 4,
+    /** A night only counts as clear if it is this much quieter than the rest of the day. */
+    contrast: 0.35,
+    /** The middle of Mote's night by nature (its nights are about 23:00 to 7:00). */
+    natureMidHour: 3,
+    natureSleep: { from: 23, to: 7 },
+    /** Minutes at the computer per quarter hour are kept this many days, then deleted. */
+    keepDays: 90,
   },
 
   /**

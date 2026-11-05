@@ -299,7 +299,8 @@ async function boot() {
   const mind = new Mind({
     think: (signal) => api.think(signal),
     enabled: () => life.background,
-    canThink: () => status.state === 'ready' && !pending && !layer.busy && !view.behaving && !theater.playing,
+    // While you're away from the computer (if it may notice), the server's slower heartbeat thinks instead.
+    canThink: () => status.state === 'ready' && !pending && !layer.busy && !view.behaving && !theater.playing && !life.writerAway,
     onThought: (r) => live(r),
   });
   mind.start();

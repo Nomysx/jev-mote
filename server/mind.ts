@@ -60,6 +60,10 @@ export interface IdleInput {
   lastThought?: LifeState['lastThought'];
   /** Who it has become, e.g. "a warm, playful dreamer who trusts you". */
   character?: string;
+  /** Its body clock runs this far behind the wall clock (it learned your rhythm): the time of day it feels. */
+  bodyShiftMs?: number;
+  /** The writer is at the computer (true) or away from it (false); unknown unless it may notice. */
+  writerNearby?: boolean | null;
 }
 
 /** The state for a background thought. Small-context models get a minimal version. */
@@ -69,9 +73,11 @@ export function buildIdleState(i: IdleInput, profile: Pick<ModelProfile, 'compac
   const style = profile.moodStyle ?? 'words';
   const state: Record<string, unknown> = {
     current_mood: describeMood(i.mood, style),
-    time_of_day: timeOfDay(i.now),
+    time_of_day: timeOfDay(i.now - (i.bodyShiftMs ?? 0)),
     last_message_from_writer: lastEntry,
   };
+  // Left out for small models, which tend to copy words from the state into every answer.
+  if (!profile.compactState && typeof i.writerNearby === 'boolean') state.writer = i.writerNearby ? 'at the computer, busy with other things' : 'away from the computer';
   if (i.body) state.body = describeBody(i.body, style);
   if (!profile.compactState) {
     state.temperament = describeTemperament(i.temperament);

@@ -13,7 +13,7 @@ export function createApp(service: MoteService, config: AppConfig, setup?: Setup
 
   app.onError((err, c) => {
     const msg = err instanceof Error ? err.message : String(err);
-    const clientError = /empty message|invalid model name|invalid json|dream not found|cloud models|no engine|isn’t installed|isn’t set up/i.test(msg);
+    const clientError = /empty message|invalid model name|invalid json|dream not found|cloud models|no engine|needs the desktop app|isn’t installed|isn’t set up/i.test(msg);
     if (!clientError) console.error('[mote] request failed:', err);
     return c.json({ error: msg }, clientError ? 400 : 500);
   });
@@ -64,6 +64,14 @@ export function createApp(service: MoteService, config: AppConfig, setup?: Setup
     const b = await body(c);
     return c.json(service.setBackground(b.background !== false));
   });
+
+  // What Mote notices about you (the desktop app; off unless you turn it on), and your rhythm.
+  app.get('/api/senses', (c) => c.json(service.sensesView()));
+  app.post('/api/settings/senses', async (c) => {
+    const b = await body(c);
+    return c.json(service.setPresence(b.presence === true));
+  });
+  app.post('/api/senses/forget', (c) => c.json(service.forgetRhythm()));
 
   app.get('/api/models', async (c) => c.json(await service.models()));
 

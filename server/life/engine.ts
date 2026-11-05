@@ -52,11 +52,14 @@ export function sleepPressure(energy: number, hour: number): number {
 /**
  * How much it misses the writer: grows with time since they last wrote or had the page open, faster
  * the more it trusts them. Zero before the first entry (nobody to miss yet). Never makes it worse
- * off: it only shapes what it thinks about and how glad it is when they come back.
+ * off: it only shapes what it thinks about and how glad it is when they come back. If it may notice
+ * them at the computer, that counts as contact too, only less (nearContactLagMs): it misses them a
+ * little while they're busy nearby, never a lot.
  */
 export function longing(life: LifeState, trust: number, now: number): number {
   if (life.lastEntryAt === null) return 0;
-  const contact = Math.max(life.lastEntryAt, life.lastSeenAt);
+  const near = life.lastNearAt != null ? life.lastNearAt - L.nearContactLagMs : -Infinity;
+  const contact = Math.max(life.lastEntryAt, life.lastSeenAt, near);
   const away = Math.max(0, now - contact);
   const attach = L.attachBase + L.attachTrust * clamp(trust);
   return clamp(attach * (1 - Math.pow(0.5, away / L.longingHalfMs)));
@@ -120,7 +123,8 @@ export function advanceLife(start: LifeState, now: number, ctx: AdvanceContext):
       }
     } else {
       life.energy = clamp(life.energy - h * drain);
-      const company = t - life.lastSeenAt < L.watchedMs ? 0.5 : 1;
+      // Company slows restlessness: you watching it, or just being at the computer.
+      const company = t - life.lastSeenAt < L.watchedMs || t - (life.lastNearAt ?? -Infinity) < L.awayAfterIdleMs ? 0.5 : 1;
       life.boredom += (1 - life.boredom) * (1 - Math.pow(0.5, (h * company) / L.boredomHalfMs));
       const quiet = t - Math.max(life.lastActiveAt, life.lastEntryAt ?? -Infinity) >= L.sleepAfterQuietMs;
       if (quiet && sleepPressure(life.energy, hour) >= L.sleepAt) {

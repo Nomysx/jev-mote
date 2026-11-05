@@ -160,6 +160,14 @@ export class MoteDb {
         data TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS life_events_blob_time ON life_events(blob_id, at);
+      -- Minutes you were at the computer, per quarter hour of each local day (only if you let Mote
+      -- notice; server/senses). No apps, no titles, nothing you typed: just the count.
+      CREATE TABLE IF NOT EXISTS activity (
+        day TEXT NOT NULL,
+        slot INTEGER NOT NULL,
+        minutes INTEGER NOT NULL,
+        PRIMARY KEY (day, slot)
+      );
     `);
     // Columns added after the first release.
     const has = (table: string, col: string) => (this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((c) => c.name === col);
@@ -360,6 +368,43 @@ export class MoteDb {
 
   setSetting(key: string, value: string) {
     this.db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
+  }
+
+  // ---- Minutes at the computer (server/senses) ----
+
+  addActivity(day: string, slot: number, minutes: number) {
+    this.db
+      .prepare('INSERT INTO activity (day, slot, minutes) VALUES (?, ?, ?) ON CONFLICT(day, slot) DO UPDATE SET minutes = MIN(15, minutes + excluded.minutes)')
+      .run(day, slot, Math.min(15, minutes));
+  }
+
+  /** The days from `since` (inclusive) to `before` (exclusive), oldest first, each with its 96 quarter hours. */
+  activityDays(since: string, before: string): { day: string; slots: number[] }[] {
+    const rows = this.db.prepare('SELECT day, slot, minutes FROM activity WHERE day >= ? AND day < ? ORDER BY day, slot').all(since, before) as {
+      day: string;
+      slot: number;
+      minutes: number;
+    }[];
+    const days = new Map<string, number[]>();
+    for (const r of rows) {
+      let slots = days.get(r.day);
+      if (!slots) days.set(r.day, (slots = new Array<number>(96).fill(0)));
+      if (r.slot >= 0 && r.slot < 96) slots[r.slot] = r.minutes;
+    }
+    return [...days].map(([day, slots]) => ({ day, slots }));
+  }
+
+  activityMinutes(day: string): number {
+    const r = this.db.prepare('SELECT COALESCE(SUM(minutes), 0) AS m FROM activity WHERE day = ?').get(day) as { m: number };
+    return Number(r.m) || 0;
+  }
+
+  pruneActivity(before: string) {
+    this.db.prepare('DELETE FROM activity WHERE day < ?').run(before);
+  }
+
+  forgetActivity() {
+    this.db.exec('DELETE FROM activity');
   }
 
   close() {

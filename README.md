@@ -8,6 +8,7 @@ A fully local emotional journaling companion. The only things on screen are a so
 - **Memory and mood.** It remembers recent history, warms up slowly, holds grudges, and drifts back to its baseline over time, even while the app is closed.
 - **A life of its own.** It has a body clock: it gets tired, sleeps at night, dreams about what you wrote, wakes in the morning and misses you while you're away. It keeps living while the page is closed, and tells you what it did when you come back.
 - **It grows.** Its character (warmth, trust, courage, wariness, curiosity, playfulness, dreaminess) is shaped by how you treat it, what it thinks about and what it dreams. The **Growth** view is a living map of that, with a timeline you can play back.
+- **It lives on your rhythm (if you let it).** In the desktop app, Mote can notice when you're at the computer (only keyboard-and-mouse idle time and the lock screen, nothing else). It misses you less while you're nearby, and over two weeks it moves its nights toward yours.
 - **Journaling.** Every entry is saved with the model's answers and a snapshot of how Mote looked. The journal shows a timeline with thumbnails, a weekly mood strip, and filters, plus Mote's dreams and its inner life.
 
 Everything runs on your machine. Entries live in one SQLite file. Mote only talks to its engine on this computer; the only downloads are the engine and models you choose in setup.
@@ -299,6 +300,17 @@ The **Growth** button opens a living map of it:
 - Milestones (first words, first kindness, the first time it got hurt, first dream, first nightmare, slept on a hard day, a core memory formed, began to trust you, grew warm, became a dreamer...) and what it thinks about most on its own.
 - A timeline: scrub it, click a milestone, or press **Play its life** to watch it grow from birth to now.
 
+### What Mote notices: you at the computer
+
+In the desktop app on Windows and macOS, Mote can notice when you're at the computer. It is **off until you turn it on** in Settings → What Mote notices (`server/senses`).
+
+- **What it reads.** Only two things, once a minute and when it needs them: how long ago the keyboard or mouse was last used anywhere on this computer, and whether the screen is locked (Electron's `powerMonitor`). Never what you type, which apps or sites you use, or what's on screen.
+- **What it keeps.** Just a count: how many minutes you were at the computer in each quarter hour of each day (the `activity` table in the journal database), deleted after 90 days. **Forget my rhythm** in Settings deletes all of it.
+- **You nearby.** With no keyboard or mouse for 10 minutes, or the screen locked, you're away. While you're at the computer, busy with other things, Mote counts that as company: it gets restless more slowly and misses you a little, never a lot (like having seen you two hours ago). An open Mote window, such as the widget on your desktop, only counts as you watching it while you're actually there. When you're back, it tells you what it did while you were away. While you're away, the open window stops thinking on its own and the slower background heartbeat takes over. Bigger models also learn whether you're at the computer or away when Mote thinks.
+- **Your daily rhythm.** From the last two weeks of finished days, code finds your usual night: the quietest seven hours of the day. Mote's body clock moves its own nights (by nature about 23:00 to 7:00) toward yours, starting after 3 days and fully after 12. A night owl's Mote stays up later and sleeps in; an early bird's goes to bed earlier. It sleeps, wakes up and feels the time of day on that clock. If your days look the same around the clock, it keeps its own nights. Settings shows your usual day hour by hour, your quiet hours and when Mote sleeps now.
+- **Turning it off.** Mote stops noticing at once. What it learned fades over the next two weeks as those days age out, unless you press Forget.
+- **Limits.** Watching a film without touching the mouse counts as being away. On Linux this isn't offered, because idle time isn't reliable everywhere (Wayland).
+
 ### Wellbeing safeguard
 
 If `distress_flag` comes back with reasonable probability (threshold in `tuning.ts`), Mote turns soft and calm, and a small, dismissible card shows helpline information as plain text (works offline). Defaults: 988 in the US, findahelpline.com internationally. Edit [`server/wellbeing.json`](server/wellbeing.json) for your region. The model can be wrong; this is a gentle nudge, not a diagnosis, and it never blocks you.
@@ -360,6 +372,7 @@ export default factory;
 
 - No cloud APIs, analytics, telemetry or CDN assets. Three.js and the Nunito font are installed from npm and bundled, and all sounds are synthesized in the browser (no audio files).
 - Thinking and dreaming on its own only talk to the same local model, only while that model is already loaded, and also while the page is closed (as long as the Mote server runs). Turn it off in Settings → Mote's mind.
+- Noticing you at the computer is off unless you turn it on. When it is on, Mote reads only the keyboard-and-mouse idle time and whether the screen is locked, and keeps only minutes per quarter hour (90 days). See [What Mote notices](#what-mote-notices-you-at-the-computer).
 - The server binds to `127.0.0.1` and only calls `OLLAMA_URL`, which must be local. Cloud models are refused by tag (`:cloud`, `-cloud`) and by the remote host Ollama reports for them.
 - The only downloads are the ones you press in setup: Mote's own engine (the official Ollama build from its GitHub releases) and models (through the engine, from Ollama's model library). Nothing is uploaded.
 - After setup (or `npm install` and pulling a model), the app works with the network disconnected.
@@ -375,7 +388,7 @@ npm test
 npm run typecheck
 ```
 
-Unit tests cover the mood engine (decay, trust, grudges, reactions, temperament), the state builder (budget trimming, field selection), response parsing, the Ollama provider's checks against a fake local server, the mock provider, the catalog, the gesture and dream-motion curves (they start and end at rest with no jumps), the voices (fixed per seed, different between blobs), the body clock (sleeping at night, waking in the morning, never falling asleep while you're active, REM and dreams), what thoughts and dreams do to it, dream memories (never distress entries), character growth and milestones, a whole simulated night end to end (it thinks, falls asleep, dreams about your day, wakes up and tells you what it did), and setup: picking the right engine build for each platform, model-download progress, and downloading, unpacking and starting an engine against a local test server.
+Unit tests cover the mood engine (decay, trust, grudges, reactions, temperament), the state builder (budget trimming, field selection), response parsing, the Ollama provider's checks against a fake local server, the mock provider, the catalog, the gesture and dream-motion curves (they start and end at rest with no jumps), the voices (fixed per seed, different between blobs), the body clock (sleeping at night, waking in the morning, never falling asleep while you're active, REM and dreams), what thoughts and dreams do to it, dream memories (never distress entries), character growth and milestones, noticing you at the computer (off by default, only minutes you used it, an open window counts as watched only while you're there, missing you less while you're nearby) and learning your rhythm (night owls and early birds, gradual adapting, no night when your days look the same, a night owl's Mote falling asleep later), a whole simulated night end to end (it thinks, falls asleep, dreams about your day, wakes up and tells you what it did), and setup: picking the right engine build for each platform, model-download progress, and downloading, unpacking and starting an engine against a local test server.
 
 ## Project layout
 
@@ -390,6 +403,7 @@ server/            Hono + better-sqlite3 back end
     providers/     ollama.ts, mock.ts (add one file per provider)
   mood/            temperament, mood engine, tuning constants
   life/            body clock, dreams, character growth, the heartbeat that keeps it living
+  senses/          noticing you at the computer (opt-in), learning your daily rhythm
   setup/           the engine (yours or Mote's own), model downloads, recommendations
   main.ts          starts everything (used by index.ts and the desktop app)
 desktop/           Electron app: tray, window and desktop widget, preload bridge
