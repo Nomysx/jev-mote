@@ -129,7 +129,7 @@ export function createJournal(el: HTMLElement, deps: JournalDeps) {
       const thought = lineFor(SITUATION_LINES[sit], deps.temperament().archetype, e.id);
       chips.push(h('span', { class: 'chip thought', title: 'What Mote thought, and what it decided to do' }, `“${thought}”${intent ? ` → ${INTENT_LABELS[intent]}` : ''}`));
     }
-    if ((e.recalls ?? 0) >= CORE) chips.push(h('span', { class: 'chip core', title: `Mote has thought or dreamed about this ${e.recalls} times` }, '✦ core memory'));
+    if ((e.recalls ?? 0) >= CORE) chips.push(h('span', { class: 'chip core', title: `Mote has thought or dreamed about this ${e.recalls} times` }, 'core memory'));
     else if (e.recalls) chips.push(h('span', { class: 'chip', title: 'Mote has thought or dreamed about this' }, `remembered ${e.recalls}×`));
     if (e.signals && e.userEmotion) {
       const p = e.signals.userEmotion[e.userEmotion] ?? 0;

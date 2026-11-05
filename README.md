@@ -10,13 +10,31 @@ A fully local emotional journaling companion. The only things on screen are a so
 - **It grows.** Its character (warmth, trust, courage, wariness, curiosity, playfulness, dreaminess) is shaped by how you treat it, what it thinks about and what it dreams. The **Growth** view is a living map of that, with a timeline you can play back.
 - **Journaling.** Every entry is saved with the model's answers and a snapshot of how Mote looked. The journal shows a timeline with thumbnails, a weekly mood strip, and filters, plus Mote's dreams and its inner life.
 
-Everything runs on your machine. Entries live in one SQLite file. The only network connection the app makes is to your local Ollama server.
+Everything runs on your machine. Entries live in one SQLite file. Mote only talks to its engine on this computer; the only downloads are the engine and models you choose in setup.
 
 ---
 
-## Quick start
+## Get Mote for your computer (desktop app)
 
-Requirements: **Node.js 22.12+** and, for real models, **Ollama 0.35+** (Laya needs 0.40.0+, and the current Ollama packages of laya, tev1 and nimble declare 0.40.4+).
+1. **Download the installer.** Open the repository's **Actions** tab, pick the latest **Desktop app** run, and download from its **Artifacts**: `Mote-Windows` (inside: `Mote-Setup-x.y.z.exe`, or `Mote-Portable-x.y.z.exe` to run without installing), `Mote-macOS` (`.dmg`) or `Mote-Linux` (`.AppImage`). Tagged versions (`v0.2.0`...) are also attached to a GitHub Release.
+2. **Install and open it.** The Windows installer needs no admin rights and opens Mote when it's done. The builds aren't code-signed yet, so Windows may say "Windows protected your PC": click **More info**, then **Run anyway**. On macOS, right-click the app and choose **Open** the first time. On Linux, make the AppImage executable and run it.
+3. **Let Mote set itself up.** It says hello and walks you through two steps:
+   - **Engine.** If you already run Ollama, Mote finds it. If not, press **Set it up for me**: Mote downloads the free, open-source Ollama engine once (1.6 GB on Windows, 190 MB on macOS) into its own folder and runs it privately while Mote runs. Nothing is installed system-wide.
+   - **Brain.** Press **Download** on the recommended small model (under 1 GB; Tev1 small for English, Laya multilingual for other languages). Mote switches to it as soon as it's there. Bigger models are under **More models**.
+
+That's all. From then on Mote works offline.
+
+**Tray and widget.** Mote lives in the tray (the notification area on Windows, the menu bar on macOS). Closing the window keeps it living there: it still sleeps, dreams and thinks on its own. From the tray icon or Settings you can show it as a **desktop widget**: a small, transparent, frameless Mote with a text box that floats on your desktop (drag it by the bar that appears on hover; keep it above other windows or not). You can also start Mote when you log in. Windows 11's Widgets board only accepts widgets from Microsoft Store apps, so Mote's widget is a floating desktop widget instead.
+
+**Your data** stays in one folder: `%APPDATA%\mote` on Windows, `~/Library/Application Support/mote` on macOS, `~/.config/mote` on Linux. It holds the journal (`mote.sqlite`), and, if Mote set up its own engine, `engine/` and `models/`. Uninstalling Mote keeps this folder; delete it to remove everything.
+
+**Build the installers yourself:** `npm install`, then `npm run desktop:dist` (builds for the computer you're on; Windows installers need Windows, or the GitHub Actions workflow in `.github/workflows/desktop.yml`). `npm run desktop` runs the desktop app from source.
+
+---
+
+## Quick start (from source)
+
+Requirements: **Node.js 22.13+** and, for real models, **Ollama 0.35+** (Laya needs 0.40.0+, and the current Ollama packages of laya, tev1 and nimble declare 0.40.4+). You don't have to install Ollama yourself: the setup screen can download Mote's own copy.
 
 ```bash
 npm install
@@ -137,7 +155,9 @@ Only one model needs to be loaded at a time. If memory is tight, lower `OLLAMA_K
 | `DECISION_TIMEOUT_MS` | `300000` | How long to wait for one answer (big models on CPU are slow) |
 | `MOTE_HOST` / `MOTE_PORT` | `127.0.0.1` / `5174` | Mote's own server (binds to this machine only) |
 | `MOTE_DB_PATH` | `data/mote.sqlite` | The journal database |
-| `MOTE_DEBUG` | `true` outside production | Debug panel and debug endpoints |
+| `MOTE_DEBUG` | `false` | Debug panel and debug endpoints |
+| `MOTE_DATA_DIR` | next to the journal | Where Mote keeps its own engine and models, if it sets them up |
+| `MOTE_ENGINE_PORT` | `11435` | Port for Mote's own engine (so it never clashes with your Ollama) |
 
 ---
 
@@ -287,7 +307,7 @@ If `distress_flag` comes back with reasonable probability (threshold in `tuning.
 
 ## Debug tools
 
-With `MOTE_DEBUG=true`, a **Debug** button appears (or open the app with `?debug`):
+With `MOTE_DEBUG=true` in `.env`, a **Debug** button appears (or open the app with `?debug`). It is hidden otherwise:
 
 - Sliders for every visual parameter, to tune the mapping without any model.
 - **Fast-forward time** (+1 h to +7 days): mood decay, trust, grudges and Mote's body clock run on a shifted clock, so you can simulate days of journaling. It sleeps and wakes through the skipped time, and the "While you were away" card shows what happened.
@@ -341,7 +361,9 @@ export default factory;
 - No cloud APIs, analytics, telemetry or CDN assets. Three.js and the Nunito font are installed from npm and bundled, and all sounds are synthesized in the browser (no audio files).
 - Thinking and dreaming on its own only talk to the same local model, only while that model is already loaded, and also while the page is closed (as long as the Mote server runs). Turn it off in Settings → Mote's mind.
 - The server binds to `127.0.0.1` and only calls `OLLAMA_URL`, which must be local. Cloud models are refused by tag (`:cloud`, `-cloud`) and by the remote host Ollama reports for them.
-- After `npm install` (and pulling a model), the app works with the network disconnected.
+- The only downloads are the ones you press in setup: Mote's own engine (the official Ollama build from its GitHub releases) and models (through the engine, from Ollama's model library). Nothing is uploaded.
+- After setup (or `npm install` and pulling a model), the app works with the network disconnected.
+- Storage uses the SQLite built into Node and Electron, so there are no native modules to compile.
 
 ## Tests
 
@@ -353,7 +375,7 @@ npm test
 npm run typecheck
 ```
 
-Unit tests cover the mood engine (decay, trust, grudges, reactions, temperament), the state builder (budget trimming, field selection), response parsing, the Ollama provider's checks against a fake local server, the mock provider, the catalog, the gesture and dream-motion curves (they start and end at rest with no jumps), the voices (fixed per seed, different between blobs), the body clock (sleeping at night, waking in the morning, never falling asleep while you're active, REM and dreams), what thoughts and dreams do to it, dream memories (never distress entries), character growth and milestones, and a whole simulated night end to end: it thinks, falls asleep, dreams about your day, wakes up and tells you what it did.
+Unit tests cover the mood engine (decay, trust, grudges, reactions, temperament), the state builder (budget trimming, field selection), response parsing, the Ollama provider's checks against a fake local server, the mock provider, the catalog, the gesture and dream-motion curves (they start and end at rest with no jumps), the voices (fixed per seed, different between blobs), the body clock (sleeping at night, waking in the morning, never falling asleep while you're active, REM and dreams), what thoughts and dreams do to it, dream memories (never distress entries), character growth and milestones, a whole simulated night end to end (it thinks, falls asleep, dreams about your day, wakes up and tells you what it did), and setup: picking the right engine build for each platform, model-download progress, and downloading, unpacking and starting an engine against a local test server.
 
 ## Project layout
 
@@ -368,6 +390,11 @@ server/            Hono + better-sqlite3 back end
     providers/     ollama.ts, mock.ts (add one file per provider)
   mood/            temperament, mood engine, tuning constants
   life/            body clock, dreams, character growth, the heartbeat that keeps it living
+  setup/           the engine (yours or Mote's own), model downloads, recommendations
+  main.ts          starts everything (used by index.ts and the desktop app)
+desktop/           Electron app: tray, window and desktop widget, preload bridge
+build/             app and tray icons (SVG sources and PNGs)
+scripts/           bundles the desktop app
 shared/            types and the visual mapping used by both sides
 tests/             vitest unit tests
 ```

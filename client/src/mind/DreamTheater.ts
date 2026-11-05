@@ -116,7 +116,7 @@ export class DreamTheater {
     // 2. "I had a dream…", when, and what about.
     at(700, () => {
       this.say(pickFrom(d.remembered ? REMEMBERED_INTRO_LINES : DREAM_INTRO_LINES, seed));
-      const about = d.memories[0] ? ` · about “${d.memories[0].text.length > 70 ? `${d.memories[0].text.slice(0, 69).trimEnd()}…` : d.memories[0].text}”` : '';
+      const about = d.memories[0] ? `, about “${d.memories[0].text.length > 70 ? `${d.memories[0].text.slice(0, 69).trimEnd()}…` : d.memories[0].text}”` : '';
       this.sub.textContent = `${d.remembered ? 'remembered' : 'dreamed'} at ${clockTime(ev.at)}${about}`;
     });
 
@@ -125,7 +125,7 @@ export class DreamTheater {
       const options = (Object.entries(d.event) as [typeof first, number][]).sort((a, b) => b[1] - a[1]).slice(0, 3);
       void layer.play({
         quiet: true,
-        thoughts: options.map(([k, p], i) => ({ text: pickFrom(DREAM_EVENT_LINES[k], seed + i), p, detail: `${Math.round(p * 100)}% · ${k}` })),
+        thoughts: options.map(([k, p], i) => ({ text: pickFrom(DREAM_EVENT_LINES[k], seed + i), p, detail: `${k}, ${Math.round(p * 100)}%` })),
         confidence: d.vividness,
       });
     });

@@ -110,6 +110,9 @@ textarea {
 }
 
 .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -117,6 +120,27 @@ textarea {
   cursor: pointer;
   color: var(--text-dim);
   backdrop-filter: blur(8px);
+  font-size: 0.92rem;
+}
+
+.icon-btn svg,
+.mini-btn svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#btn-sound svg path:first-child {
+  fill: currentColor;
+  stroke: none;
+}
+
+#btn-sound.off .wave {
+  display: none;
 }
 
 .icon-btn:hover,
@@ -776,13 +800,11 @@ body.mote-asleep {
   font-size: 1rem;
 }
 
-.away-card ul {
-  list-style: none;
+.away-list {
   margin: 8px 0 0;
-  padding: 0;
 }
 
-.away-card li,
+.away-row,
 .life-row {
   display: grid;
   grid-template-columns: 64px 1fr;
@@ -791,7 +813,7 @@ body.mote-asleep {
   color: var(--text-dim);
 }
 
-.away-card li.dream,
+.away-row.dream,
 .life-row.dream {
   color: var(--text);
 }
@@ -1291,20 +1313,20 @@ body.mote-asleep {
   font-size: 0.84rem;
 }
 
-.mm-milestones li {
+.mm-milestones .ms {
   padding: 4px 6px;
   border-radius: 8px;
   cursor: pointer;
   transition: opacity 0.3s;
 }
 
-.mm-milestones li:hover,
-.mm-milestones li:focus {
+.mm-milestones .ms:hover,
+.mm-milestones .ms:focus {
   background: var(--surface-2);
   outline: none;
 }
 
-.mm-milestones li.future {
+.mm-milestones .ms.future {
   opacity: 0.35;
 }
 
@@ -1375,4 +1397,374 @@ body.mote-asleep {
     top: 56px;
     left: 16px;
   }
+}
+
+/* ---- Clearer UI: no list bullets, setup, welcome ---- */
+ul,
+ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lines p {
+  margin: 4px 0;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.check input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+
+.actions.center {
+  justify-content: center;
+}
+
+.btn.primary {
+  font-weight: 700;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.brain {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+details.more {
+  margin-top: 12px;
+}
+
+details.more summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.setup-panel,
+.welcome {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100% - 24px));
+  max-height: calc(100% - 110px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+  padding: 22px 24px 18px;
+  z-index: 6;
+  animation: fade-in 0.5s ease;
+}
+
+.welcome {
+  width: min(440px, calc(100% - 24px));
+  text-align: center;
+  line-height: 1.55;
+}
+
+.welcome h2,
+.setup-panel h2 {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+
+.setup-step {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.setup-step h3 {
+  margin: 4px 0 6px;
+  font-size: 1rem;
+}
+
+.setup-step p {
+  margin: 4px 0;
+}
+
+.step-num {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.setup-step.done .step-num {
+  background: var(--ok);
+  color: #10301c;
+  border-color: transparent;
+}
+
+.model-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.model-card.best {
+  border-color: var(--accent);
+}
+
+.model-card .name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.model-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.6s ease;
+}
+
+.progress span.indeterminate {
+  animation: progress-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+.mm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 16px;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.mm-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lg {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.lg.memory {
+  background: hsl(140 55% 55%);
+}
+
+.lg.dream {
+  background: hsl(228 70% 65%);
+  transform: rotate(45deg);
+  border-radius: 2px;
+  width: 7px;
+  height: 7px;
+}
+
+.lg.core {
+  border: 2px solid #f3c56b;
+  background: transparent;
+}
+
+.lg.line {
+  width: 16px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-faint);
+}
+
+/* ---- The desktop widget: just Mote, a small text box, and two tiny buttons ---- */
+.widget-bar {
+  display: none;
+}
+
+body.mode-widget,
+html:has(body.mode-widget) {
+  background: transparent;
+}
+
+.mode-widget .top-bar,
+.mode-widget .composer-hint,
+.mode-widget .panel,
+.mode-widget .mindmap,
+.mode-widget .welcome {
+  display: none !important;
+}
+
+.mode-widget .widget-bar {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.mode-widget:hover .widget-bar,
+.mode-widget .widget-bar:focus-within {
+  opacity: 1;
+}
+
+.widget-bar .drag {
+  flex: 1;
+  height: 22px;
+  border-radius: 999px;
+  -webkit-app-region: drag;
+  cursor: grab;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.mini-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.mini-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.mode-widget .composer {
+  bottom: 8px;
+  width: calc(100% - 16px);
+}
+
+.mode-widget .composer-box {
+  padding: 4px 4px 4px 12px;
+}
+
+.mode-widget .composer textarea {
+  font-size: 0.9rem;
+}
+
+.mode-widget .send-btn {
+  padding: 6px 12px;
+}
+
+.mode-widget .status-card {
+  bottom: 64px;
+  font-size: 0.85rem;
+}
+
+.mode-widget .status-card .msg {
+  font-size: 0.9rem;
+}
+
+.mode-widget .wellbeing,
+.mode-widget .away-card,
+.mode-widget .setup-panel {
+  top: 34px;
+  left: 8px;
+  right: 8px;
+  width: auto;
+  transform: none;
+  max-height: calc(100% - 110px);
+  font-size: 0.82rem;
+}
+
+.mode-widget .mind-thought {
+  font-size: 13px;
+}
+
+.mode-widget .mind-choice {
+  font-size: 11px;
+}
+
+.mode-widget .dream-caption {
+  font-size: 16px;
+  top: 12%;
+}
+
+.mode-widget .dream-sub {
+  top: calc(12% + 28px);
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .icon-btn .label {
+    display: none;
+  }
+  .icon-btn {
+    padding: 8px 10px;
+  }
+}
+
+/* One thing at a time: the status message waits while the welcome or setup is open. */
+body:has(#welcome:not([hidden])) .status-card,
+body:has(#setup:not([hidden])) .status-card {
+  display: none;
+}
+
+html:has(body.mode-widget) {
+  background: transparent;
 }

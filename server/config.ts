@@ -4,7 +4,8 @@ import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+/** The project (or installed app) folder. The desktop app sets MOTE_ROOT to where it is installed. */
+export const ROOT_DIR = process.env.MOTE_ROOT ? path.resolve(process.env.MOTE_ROOT) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export interface AppConfig {
   decisionProvider: string;
@@ -16,6 +17,14 @@ export interface AppConfig {
   host: string;
   port: number;
   dbPath: string;
+  /** Where Mote keeps its own engine and models if it sets them up itself (next to the journal by default). */
+  dataDir: string;
+  /** Port for Mote's own engine, so it never clashes with an Ollama you run yourself. */
+  enginePort: number;
+  /** Overrides where the engine is downloaded from (a mirror, or a local file server in tests). */
+  engineUrl: string | null;
+  /** Running inside the desktop app. */
+  desktop: boolean;
   debugTools: boolean;
   production: boolean;
 }
@@ -37,6 +46,8 @@ export function parseKeepAlive(raw: string | undefined): string | number {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const production = env.NODE_ENV === 'production';
   const dbPath = env.MOTE_DB_PATH || path.join(ROOT_DIR, 'data', 'mote.sqlite');
+  const absDb = path.isAbsolute(dbPath) ? dbPath : path.join(ROOT_DIR, dbPath);
+  const dataDir = env.MOTE_DATA_DIR ? path.resolve(env.MOTE_DATA_DIR) : path.dirname(absDb);
   return {
     decisionProvider: (env.DECISION_PROVIDER || 'ollama').trim().toLowerCase(),
     ollamaUrl: (env.OLLAMA_URL || 'http://localhost:11434').trim().replace(/\/+$/, ''),
@@ -45,8 +56,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     decisionTimeoutMs: Number(env.DECISION_TIMEOUT_MS) > 0 ? Number(env.DECISION_TIMEOUT_MS) : 300_000,
     host: env.MOTE_HOST || '127.0.0.1',
     port: Number(env.MOTE_PORT) > 0 ? Number(env.MOTE_PORT) : 5174,
-    dbPath: path.isAbsolute(dbPath) ? dbPath : path.join(ROOT_DIR, dbPath),
-    debugTools: bool(env.MOTE_DEBUG, !production),
+    dbPath: absDb,
+    dataDir,
+    enginePort: Number(env.MOTE_ENGINE_PORT) > 0 ? Number(env.MOTE_ENGINE_PORT) : 11435,
+    engineUrl: env.MOTE_ENGINE_URL?.trim() || null,
+    desktop: bool(env.MOTE_DESKTOP, false),
+    // Hidden unless you ask for it (MOTE_DEBUG=true).
+    debugTools: bool(env.MOTE_DEBUG, false),
     production,
   };
 }

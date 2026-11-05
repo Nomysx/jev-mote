@@ -33,7 +33,14 @@ export class Thumbnailer {
   render(key: string, v: VisualParams, seed: number, phase = 0): string {
     const hit = this.cache.get(key);
     if (hit) return hit;
-    const r = this.ensure();
+    let r: THREE.WebGLRenderer;
+    try {
+      r = this.ensure();
+    } catch {
+      const flat = flatThumbnail(v, this.size);
+      this.cache.set(key, flat);
+      return flat;
+    }
     const u = this.material.uniforms;
     applyVisual(u, v);
     u.uSeed.value = (seed % 997) / 97;
@@ -51,4 +58,26 @@ export class Thumbnailer {
     this.cache.set(key, url);
     return url;
   }
+}
+
+/** A soft 2D blob in the same colors, when WebGL isn't available. */
+function flatThumbnail(v: VisualParams, size: number): string {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  if (!g) return '';
+  const r = size * 0.32 * v.scale;
+  const x = size / 2;
+  const y = size / 2 + v.sink * size * 0.1;
+  const hue = Math.round(v.hueA * 360);
+  const sat = Math.round(v.saturation * 75 * (1 - v.grey));
+  const light = Math.max(20, Math.min(75, 34 + 22 * v.brightness));
+  const grad = g.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+  grad.addColorStop(0, `hsl(${hue} ${sat}% ${Math.min(92, light + 22)}%)`);
+  grad.addColorStop(1, `hsl(${hue} ${sat}% ${Math.max(10, light - 10)}%)`);
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(x, y, r, 0, Math.PI * 2);
+  g.fill();
+  return c.toDataURL('image/png');
 }

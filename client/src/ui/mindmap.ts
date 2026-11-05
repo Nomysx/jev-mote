@@ -84,7 +84,7 @@ export function createMindMap(el: HTMLElement, deps: MindMapDeps) {
   const who = h('p', { class: 'mm-who' });
   const born = h('p', { class: 'faint' });
   const traitsEl = h('div', { class: 'mm-traits' });
-  const milestonesEl = h('ol', { class: 'mm-milestones' });
+  const milestonesEl = h('div', { class: 'mm-milestones', role: 'list' });
   const mindEl = h('p', { class: 'muted' });
   const slider = h('input', { type: 'range', min: 0, max: 1000, step: 1, value: 1000, 'aria-label': 'Time in Mote’s life' }) as HTMLInputElement;
   const dateEl = h('span', { class: 'mm-date' });
@@ -98,7 +98,14 @@ export function createMindMap(el: HTMLElement, deps: MindMapDeps) {
     h(
       'div',
       { class: 'mm-body' },
-      h('div', { class: 'mm-graph' }, canvas, tip, empty, h('p', { class: 'mm-legend faint' }, '● memories (your entries, colored by feeling) · ✦ dreams · ◎ core memories it keeps coming back to · lines show what shaped each trait')),
+      h('div', { class: 'mm-graph' }, canvas, tip, empty, h(
+          'div',
+          { class: 'mm-legend' },
+          h('span', {}, h('i', { class: 'lg memory' }), 'Memories: your entries, colored by feeling'),
+          h('span', {}, h('i', { class: 'lg dream' }), 'Dreams'),
+          h('span', {}, h('i', { class: 'lg core' }), 'Core memories'),
+          h('span', {}, h('i', { class: 'lg line' }), 'What shaped each trait'),
+        )),
       h('div', { class: 'mm-side' }, h('h3', {}, 'Character'), traitsEl, h('h3', {}, 'Milestones'), milestonesEl, h('h3', {}, 'What it thinks about on its own'), mindEl),
     ),
     h('div', { class: 'mm-timeline' }, playBtn, h('div', { class: 'mm-track' }, ticks, slider), dateEl),
@@ -457,7 +464,7 @@ export function createMindMap(el: HTMLElement, deps: MindMapDeps) {
     T = Math.max(report.bornAt, Math.min(end(), t));
     if (!fromSlider) slider.value = String(Math.round(((T - report.bornAt) / span()) * 1000));
     const d = Math.floor((T - report.bornAt) / 86_400_000);
-    dateEl.textContent = T >= end() - 60_000 ? 'Now' : `Day ${d + 1} · ${day(T)}`;
+    dateEl.textContent = T >= end() - 60_000 ? 'Now' : `Day ${d + 1}, ${day(T)}`;
     updateSide();
   }
 
@@ -478,11 +485,11 @@ export function createMindMap(el: HTMLElement, deps: MindMapDeps) {
           h('span', { class: 'name' }, TRAIT_LABEL[t]),
           spark,
           h('span', { class: 'val' }, `${Math.round(v * 100)}`),
-          h('span', { class: `delta ${delta >= 0 ? 'up' : 'down'}` }, Math.abs(delta) >= 0.005 ? pctPts(delta) : '·'),
+          h('span', { class: `delta ${delta >= 0 ? 'up' : 'down'}` }, Math.abs(delta) >= 0.005 ? pctPts(delta) : ''),
         ),
       );
     }
-    milestonesEl.querySelectorAll('li').forEach((li) => li.classList.toggle('future', Number((li as HTMLElement).dataset.at) > T));
+    milestonesEl.querySelectorAll('.ms').forEach((li) => li.classList.toggle('future', Number((li as HTMLElement).dataset.at) > T));
   }
 
   function drawSpark(c: HTMLCanvasElement, t: Trait) {
@@ -510,8 +517,8 @@ export function createMindMap(el: HTMLElement, deps: MindMapDeps) {
     for (const m of report!.milestones) {
       milestonesEl.append(
         h(
-          'li',
-          { 'data-at': m.at, tabindex: 0, title: 'Show Mote at this moment', onclick: () => jump(m.at), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && jump(m.at) },
+          'div',
+          { class: 'ms', role: 'listitem', 'data-at': m.at, tabindex: 0, title: 'Show Mote at this moment', onclick: () => jump(m.at), onkeydown: (e: Event) => (e as KeyboardEvent).key === 'Enter' && jump(m.at) },
           h('span', { class: 'when' }, day(m.at)),
           h('b', {}, m.label),
           m.detail ? h('span', { class: 'muted' }, ` ${m.detail}`) : null,
@@ -540,7 +547,7 @@ export function createMindMap(el: HTMLElement, deps: MindMapDeps) {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([k, n]) => `${THOUGHT_WORDS[k]} ×${n}`)
-      .join(' · ');
+      .join(', ');
   }
 
   function jump(t: number) {
@@ -592,7 +599,7 @@ export function createMindMap(el: HTMLElement, deps: MindMapDeps) {
       const v = traitsAt(T)[n.trait];
       tip.append(
         h('b', {}, `${TRAIT_LABEL[n.trait]} ${Math.round(v * 100)}`),
-        h('div', { class: 'faint' }, `at birth ${Math.round(report.nature[n.trait] * 100)} · ${pctPts(v - report.nature[n.trait])} since`),
+        h('div', { class: 'faint' }, `At birth ${Math.round(report.nature[n.trait] * 100)}, ${pctPts(v - report.nature[n.trait])} since`),
         h('div', {}, TRAIT_HELP[n.trait]),
       );
     } else if (n.memory) {
@@ -604,14 +611,14 @@ export function createMindMap(el: HTMLElement, deps: MindMapDeps) {
         .join(', ');
       tip.append(h('div', { class: 'faint' }, when(m.at)), h('div', { class: 'mm-quote' }, `“${m.text}”`));
       if (changes) tip.append(h('div', {}, `shaped: ${changes}`));
-      if (m.recalls) tip.append(h('div', { class: 'faint' }, `remembered ${m.recalls} time${m.recalls === 1 ? '' : 's'}${m.core ? ' · a core memory' : ''}`));
+      if (m.recalls) tip.append(h('div', { class: 'faint' }, `remembered ${m.recalls} time${m.recalls === 1 ? '' : 's'}${m.core ? ', a core memory' : ''}`));
     } else if (n.dream) {
       const d = n.dream;
       const effect = DREAM_EFFECT_WORDS[d.effect];
       tip.append(
         h('div', { class: 'faint' }, when(d.at)),
         h('b', {}, `${DREAM_TITLES[d.event]} ${PLACE_WORDS[d.place]}`),
-        h('div', {}, `felt like ${d.feeling}${effect ? ` · ${effect}` : ''}`),
+        h('div', {}, `Felt like ${d.feeling}${effect ? `, ${effect}` : ''}`),
       );
     }
     tip.hidden = false;

@@ -125,6 +125,41 @@ export interface WakeResponse {
   life: LifeView;
 }
 
+export interface EngineInfo {
+  state: 'running' | 'stopped' | 'missing' | 'installing' | 'starting' | 'error';
+  source: 'system' | 'managed' | null;
+  url: string;
+  version: string | null;
+  systemInstalled: boolean;
+  canInstall: boolean;
+  downloadSize: string | null;
+  job: { phase: 'downloading' | 'extracting' | 'starting'; received: number; total: number | null } | null;
+  error: string | null;
+  dir: string;
+}
+
+export interface PullJob {
+  model: string;
+  status: string;
+  completed: number;
+  total: number;
+  done: boolean;
+  error: string | null;
+  startedAt: number;
+}
+
+export interface SetupResponse {
+  provider: string;
+  engine: EngineInfo | null;
+  installed: InstalledModel[];
+  current: string;
+  status: ProviderStatus;
+  pulls: PullJob[];
+  recommended: { model: string; label: string; why: string; size: string; best: boolean; big: boolean }[];
+  memoryGb: number;
+  desktop: boolean;
+}
+
 export interface ModelsResponse {
   current: string;
   provider: string;
@@ -173,6 +208,11 @@ export const api = {
   lifeLog: (q: { before?: number; limit?: number } = {}) => call<{ events: LifeEvent[] }>(`/api/life?${query(q)}`),
   character: () => call<CharacterReport>('/api/character'),
   setLifeBackground: (background: boolean) => call<{ background: boolean }>('/api/settings/life', { body: { background } }),
+  setup: () => call<SetupResponse>(`/api/setup?${query({ lang: navigator.language })}`),
+  installEngine: () => call<{ ok: boolean }>('/api/setup/engine', { body: { action: 'install' } }),
+  startEngine: () => call<{ status: ProviderStatus }>('/api/setup/engine', { body: { action: 'start' } }),
+  pull: (model: string, use = true) => call<PullJob>('/api/setup/pull', { body: { model, use } }),
+  cancelPull: (model: string) => call<{ ok: boolean }>('/api/setup/pull/cancel', { body: { model } }),
   debugSleep: () => call<TickResponse>('/api/debug/sleep', { body: {} }),
   debugDream: () => call<ThinkResponse>('/api/debug/dream', { body: {} }),
   rebirth: (seed?: number) => call<StateResponse>('/api/debug/rebirth', { body: { seed } }),

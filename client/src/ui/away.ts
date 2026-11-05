@@ -27,15 +27,15 @@ export function createAwayCard(el: HTMLElement, deps: { archetype: () => Archety
     el.append(
       h('button', { class: 'close-btn', type: 'button', 'aria-label': 'Close', onclick: hide }, '×'),
       h('h2', {}, 'While you were away'),
-      h('p', { class: 'faint' }, `${awayLength(d.until - d.since)} · ${GREETING_WORDS[d.greeting]}`),
+      h('p', { class: 'faint' }, `You were gone ${awayLength(d.until - d.since)}. ${GREETING_WORDS[d.greeting]}`),
       h(
-        'ul',
-        {},
+        'div',
+        { class: 'away-list' },
         d.events.map((ev) => {
           const t = describeEvent(ev, deps.archetype());
           return h(
-            'li',
-            { class: ev.kind },
+            'div',
+            { class: `away-row ${ev.kind}` },
             h('span', { class: 'when' }, clockTime(ev.at)),
             h(
               'span',

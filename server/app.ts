@@ -6,13 +6,14 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { ROOT_DIR, type AppConfig } from './config';
 import type { MoteService } from './service';
+import type { Setup } from './setup';
 
-export function createApp(service: MoteService, config: AppConfig): Hono {
+export function createApp(service: MoteService, config: AppConfig, setup?: Setup): Hono {
   const app = new Hono();
 
   app.onError((err, c) => {
     const msg = err instanceof Error ? err.message : String(err);
-    const clientError = /empty message|invalid model name|invalid json|dream not found/i.test(msg);
+    const clientError = /empty message|invalid model name|invalid json|dream not found|cloud models|no engine|isn’t installed|isn’t set up/i.test(msg);
     if (!clientError) console.error('[mote] request failed:', err);
     return c.json({ error: msg }, clientError ? 400 : 500);
   });
@@ -65,6 +66,23 @@ export function createApp(service: MoteService, config: AppConfig): Hono {
   });
 
   app.get('/api/models', async (c) => c.json(await service.models()));
+
+  // Setup: the engine (yours or Mote's own) and one-click model downloads.
+  if (setup) {
+    app.get('/api/setup', async (c) => c.json(await setup.info(c.req.query('lang') || 'en')));
+    app.post('/api/setup/engine', async (c) => {
+      const b = await body(c);
+      return c.json(b.action === 'start' ? await setup.startEngine() : setup.installEngine());
+    });
+    app.post('/api/setup/pull', async (c) => {
+      const b = await body(c);
+      return c.json(setup.pull(typeof b.model === 'string' ? b.model : '', b.use !== false));
+    });
+    app.post('/api/setup/pull/cancel', async (c) => {
+      const b = await body(c);
+      return c.json(setup.cancel(typeof b.model === 'string' ? b.model : ''));
+    });
+  }
   app.post('/api/settings/model', async (c) => {
     const b = await body(c);
     return c.json(await service.setModel(typeof b.model === 'string' ? b.model : ''));
@@ -86,9 +104,8 @@ export function createApp(service: MoteService, config: AppConfig): Hono {
   // Production: serve the built client (fonts, Three.js, everything) from disk.
   const dist = path.join(ROOT_DIR, 'dist', 'client');
   if (existsSync(dist)) {
-    const root = path.relative(process.cwd(), dist) || '.';
-    app.use('/*', serveStatic({ root }));
-    app.get('*', serveStatic({ root, path: 'index.html' }));
+    app.use('/*', serveStatic({ root: dist }));
+    app.get('*', serveStatic({ root: dist, path: 'index.html' }));
   }
 
   return app;

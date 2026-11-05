@@ -1,0 +1,43 @@
+# Desktop installers: npm run desktop:dist (this computer's platform), or the GitHub Actions
+# workflow (.github/workflows/desktop.yml) for Windows, macOS and Linux.
+appId: app.mote.desktop
+productName: Mote
+copyright: Mote
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/client/**
+  - dist/desktop/**
+  - build/icon.png
+  - build/tray*.png
+  - package.json
+  - "!**/node_modules/**"
+extraMetadata:
+  main: dist/desktop/main.mjs
+asar: true
+win:
+  target:
+    - nsis
+    - portable
+  icon: build/icon.png
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  runAfterFinish: true
+  shortcutName: Mote
+  artifactName: Mote-Setup-${version}.${ext}
+portable:
+  artifactName: Mote-Portable-${version}.${ext}
+mac:
+  target: dmg
+  category: public.app-category.lifestyle
+  icon: build/icon.png
+  artifactName: Mote-${version}-${arch}.${ext}
+linux:
+  target: AppImage
+  category: Utility
+  icon: build/icon.png
+  artifactName: Mote-${version}-${arch}.${ext}

@@ -3,8 +3,6 @@
 // on its own, sleep, and dreams made from its memories. Only the DecisionProvider interface is used
 // here; nothing provider-specific.
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { decideIdleAction, decideIntent } from '../shared/decide';
 import { topKey } from '../shared/dream';
 import { topTwo } from '../shared/math';
@@ -30,7 +28,7 @@ import {
 } from '../shared/types';
 import { applyBody, moodToVisual, type VisualParams } from '../shared/visuals';
 import type { Clock } from './clock';
-import { ROOT_DIR, type AppConfig } from './config';
+import type { AppConfig } from './config';
 import type { BlobRow, EntryFilter, EventFilter, MoteDb } from './db';
 import type { Catalog, Preset } from './decision/catalog';
 import { choiceDist, toSignals } from './decision/parse';
@@ -62,6 +60,7 @@ import { buildIdleState, pickMemory } from './mind';
 import { applyMessage, applyUnreadable, decay, describeGrudges, describeMood, grudgeTotal, initialMood, relativeTime } from './mood/engine';
 import { describeTemperament, generateTemperament, randomSeed } from './mood/temperament';
 import { TUNING } from './mood/tuning';
+import wellbeingJson from './wellbeing.json' with { type: 'json' };
 
 export interface WellbeingCard {
   title: string;
@@ -191,7 +190,7 @@ export class MoteService {
     private clock: Clock,
     private log: (msg: string) => void = console.log,
   ) {
-    const raw = JSON.parse(readFileSync(path.join(ROOT_DIR, 'server', 'wellbeing.json'), 'utf8')) as WellbeingCard & { $comment?: string };
+    const raw = wellbeingJson as WellbeingCard & { $comment?: string };
     this.wellbeing = { title: raw.title, body: raw.body, lines: raw.lines, note: raw.note };
   }
 

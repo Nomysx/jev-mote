@@ -1,0 +1,73 @@
+# Builds the desktop installers: Windows (installer + portable), macOS (dmg) and Linux (AppImage).
+# Download them from the run's "Artifacts". Pushing a tag like v0.2.0 also attaches them to a release.
+name: Desktop app
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+    branches: ['**']
+    paths:
+      - 'desktop/**'
+      - 'client/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'build/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'electron-builder.yml'
+      - '.github/workflows/desktop.yml'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+            files: release/*.exe
+          - os: macos-latest
+            target: --mac
+            files: release/*.dmg
+          - os: ubuntu-latest
+            target: --linux
+            files: release/*.AppImage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tests
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run typecheck && npm test
+      - run: npm run build && npm run build:desktop
+      - name: Package
+        run: npx electron-builder ${{ matrix.target }} --publish never
+        env:
+          # Unsigned builds (no code-signing certificate configured).
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mote-${{ runner.os }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: installers/*

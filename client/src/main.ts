@@ -9,6 +9,7 @@ import { api, type BlobInfo, type CharacterBrief, type MessageResponse, type Moo
 import { SoundEngine } from './audio/SoundEngine';
 import { voiceFromTemperament, type MoodTone } from './audio/voice';
 import { BlobView } from './blob/BlobView';
+import { FlatView } from './blob/FlatView';
 import { Thumbnailer } from './blob/Thumbnailer';
 import { DreamTheater } from './mind/DreamTheater';
 import { GREETING_LINES, NIGHTMARE_LINES, REMEMBERED_INTRO_LINES, WOKEN_LINES } from './mind/dreamLines';
@@ -22,12 +23,26 @@ import { clear, h } from './ui/dom';
 import { createJournal } from './ui/journal';
 import { createMindMap } from './ui/mindmap';
 import { createSettings } from './ui/settings';
+import { createSetup } from './ui/setup';
+import { desktop, viewMode } from './desktop';
 
 type DreamEvent = LifeEvent & { kind: 'dream' };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const TICK_READY_MS = 60_000;
+const WELCOME_KEY = 'mote.welcomed';
+
+/** What a not-ready status means, in plain words, and what the button does. */
+const STATUS_HELP: Partial<Record<ProviderStatus['state'], { msg: string; action: string }>> = {
+  offline: { msg: 'Mote is asleep until its engine is running.', action: 'Set up Mote' },
+  model_missing: { msg: 'Mote needs a small model to wake up.', action: 'Choose a model' },
+  outdated: { msg: 'Mote’s engine needs an update.', action: 'Fix it' },
+  endpoint_missing: { msg: 'Mote’s engine needs an update.', action: 'Fix it' },
+  cloud_model: { msg: 'That model runs in the cloud. Mote only uses models on this computer.', action: 'Choose a model' },
+  not_decision_model: { msg: 'That model can’t be Mote’s brain.', action: 'Choose a model' },
+  remote_host: { msg: 'Mote’s engine has to run on this computer.', action: 'Set up Mote' },
+};
 const TICK_WAITING_MS = 8_000;
 const POKES_TO_WAKE = 3;
 
@@ -54,6 +69,8 @@ async function boot() {
   const textarea = $<HTMLTextAreaElement>('entry');
   const send = $<HTMLButtonElement>('send');
   const dreamOffer = $<HTMLButtonElement>('dream-offer');
+  document.body.classList.add(`mode-${viewMode}`);
+  if (desktop) document.body.classList.add('desktop');
 
   let initial: StateResponse;
   try {
@@ -79,7 +96,15 @@ async function boot() {
   window.addEventListener('pointerdown', noteInput, { capture: true });
   window.addEventListener('keydown', noteInput, { capture: true });
 
-  const view = new BlobView(stage, blob.temperament.seed);
+  // 3D when the computer allows it; a simple 2D Mote when WebGL can't start (e.g. a blocked GPU driver).
+  let view: BlobView;
+  try {
+    view = new BlobView(stage, blob.temperament.seed);
+  } catch (err) {
+    console.warn('3D is unavailable, using the 2D Mote:', (err as Error).message);
+    stage.querySelectorAll('canvas').forEach((c) => c.remove());
+    view = new FlatView(stage, blob.temperament.seed) as unknown as BlobView;
+  }
   const thumbs = new Thumbnailer();
   const sound = new SoundEngine(voiceFromTemperament(blob.temperament));
   sound.setMood(toneOf(initial.mood));
@@ -118,7 +143,8 @@ async function boot() {
   // Sound toggle in the top bar.
   const soundBtn = $<HTMLButtonElement>('btn-sound');
   const showSound = () => {
-    soundBtn.textContent = sound.enabled ? 'Sound on' : 'Sound off';
+    soundBtn.querySelector('.label')!.textContent = sound.enabled ? 'Sound on' : 'Sound off';
+    soundBtn.classList.toggle('off', !sound.enabled);
     soundBtn.setAttribute('aria-pressed', String(sound.enabled));
   };
   soundBtn.addEventListener('click', () => sound.setEnabled(!sound.enabled));
@@ -180,7 +206,7 @@ async function boot() {
       ? top(s.situation, 4, 0.03).map(([k, p], i) => ({
           text: lineFor(SITUATION_LINES[k as Situation], archetype, i === 0 ? seed : seed + 1009 * i),
           p,
-          detail: `${pct(p)} · ${label(k)}`,
+          detail: `${label(k)}, ${pct(p)}`,
         }))
       : [];
     // The model suggests an action; Mote weighs it against the moment, its temperament and who it has become.
@@ -201,7 +227,7 @@ async function boot() {
       thoughts,
       confidence: s.situationConfidence ?? 0.5,
       decision: intents.length
-        ? { options: intents.map(([k, p]) => ({ text: INTENT_LABELS[k], p, detail: `${pct(p)} · ${label(k)}` })), confidence: s.intentConfidence ?? 0.5 }
+        ? { options: intents.map(([k, p]) => ({ text: INTENT_LABELS[k], p, detail: `${label(k)}, ${pct(p)}` })), confidence: s.intentConfidence ?? 0.5 }
         : undefined,
       onSettle: feel,
       onDecide: () => {
@@ -226,11 +252,11 @@ async function boot() {
     const action = r.decision?.chosen ?? actions[0]?.[0];
     await layer.play({
       quiet: true,
-      thoughts: ts.map(([k, p], i) => ({ text: lineFor(IDLE_LINES[k], archetype, i === 0 ? seed : seed + 131 * i), p, detail: `${pct(p)} · ${label(k)}` })),
+      thoughts: ts.map(([k, p], i) => ({ text: lineFor(IDLE_LINES[k], archetype, i === 0 ? seed : seed + 131 * i), p, detail: `${label(k)}, ${pct(p)}` })),
       confidence: r.thought.confidence,
       quote: remembering && r.memory ? (r.memory.text.length > 90 ? `${r.memory.text.slice(0, 89).trimEnd()}…` : r.memory.text) : undefined,
       decision: actions.length
-        ? { options: actions.map(([k, p]) => ({ text: IDLE_ACTION_LABELS[k], p, detail: `${pct(p)} · ${label(k)}` })), confidence: r.action.confidence }
+        ? { options: actions.map(([k, p]) => ({ text: IDLE_ACTION_LABELS[k], p, detail: `${label(k)}, ${pct(p)}` })), confidence: r.action.confidence }
         : undefined,
       onSettle: () => {
         sound.play('thought', { intensity: 0.3 });
@@ -390,13 +416,18 @@ async function boot() {
     clear(statusEl);
     statusEl.hidden = ready;
     if (!ready) {
+      const help = STATUS_HELP[s.state] ?? { msg: s.message, action: 'Set up Mote' };
       statusEl.append(
         h(
           'div',
           {},
-          h('div', { class: 'msg' }, s.message),
-          s.command ? h('div', {}, h('code', {}, s.command)) : null,
-          h('div', {}, h('button', { class: 'link-btn', type: 'button', onclick: () => void tick(true) }, 'Check again')),
+          h('div', { class: 'msg' }, help.msg),
+          h(
+            'div',
+            { class: 'actions center' },
+            h('button', { class: 'btn primary', type: 'button', onclick: () => openSetup() }, help.action),
+            h('button', { class: 'btn', type: 'button', onclick: () => void tick(true) }, 'Check again'),
+          ),
         ),
       );
     }
@@ -442,7 +473,7 @@ async function boot() {
       h('button', { class: 'close-btn', type: 'button', 'aria-label': 'Close', onclick: () => (wellbeingEl.hidden = true) }, '×'),
       h('h2', {}, card.title),
       h('p', {}, card.body),
-      h('ul', {}, card.lines.map((l) => h('li', {}, h('b', {}, `${l.label}: `), l.text))),
+      h('div', { class: 'lines' }, card.lines.map((l) => h('p', {}, h('b', {}, `${l.label}: `), l.text))),
       h('p', { class: 'note' }, card.note),
     );
     wellbeingEl.hidden = false;
@@ -459,6 +490,15 @@ async function boot() {
   }
 
   // ---- Panels ----
+  const setup = createSetup($('setup'), { onStatus: (st) => applyStatus(st) });
+  function openSetup() {
+    if (viewMode === 'widget' && desktop) return desktop.openApp();
+    journal.toggle(false);
+    settings.toggle(false);
+    growth.toggle(false);
+    setup.toggle(true);
+  }
+  document.addEventListener('mote-ready', () => void tick(false));
   const away = createAwayCard($('away'), { archetype: () => blob.temperament.archetype, onWatch: (ev) => void watchDream(ev) });
   const journal = createJournal($('journal'), {
     thumbs,
@@ -494,6 +534,7 @@ async function boot() {
         growth.toggle(true);
       },
     },
+    openSetup: () => openSetup(),
   });
   const debug = createDebug($('debug'), {
     view,
@@ -538,8 +579,50 @@ async function boot() {
       journal.toggle(false);
       settings.toggle(false);
       growth.toggle(false);
+      setup.toggle(false);
     }
   });
+
+  // ---- The desktop widget's own controls ----
+  $('w-open').addEventListener('click', () => (desktop ? desktop.openApp() : (location.search = '')));
+  $('w-hide').addEventListener('click', () => desktop?.hide());
+  $('w-hide').hidden = !desktop;
+
+  // ---- First run: a short hello, then setup if Mote can't think yet ----
+  function welcome() {
+    const el = $('welcome');
+    const needsSetup = status.state !== 'ready' && status.provider !== 'mock';
+    clear(el);
+    el.append(
+      h('h2', {}, 'Hi, I’m Mote.'),
+      h('p', {}, 'Write to me about anything: your day, a worry, a good thing. I can’t talk, but I feel it, and you’ll see it in my shape, colors and sounds.'),
+      h('p', {}, 'I have a life of my own. I sleep, I dream about what you tell me, and I grow over time.'),
+      h('p', { class: 'muted' }, 'Everything stays on this computer.'),
+      h(
+        'div',
+        { class: 'actions center' },
+        h(
+          'button',
+          {
+            class: 'btn primary',
+            type: 'button',
+            onclick: () => {
+              el.hidden = true;
+              try {
+                localStorage.setItem(WELCOME_KEY, '1');
+              } catch {
+                /* fine */
+              }
+              if (needsSetup) openSetup();
+              else textarea.focus();
+            },
+          },
+          needsSetup ? 'Set me up (a few minutes)' : 'Let’s start',
+        ),
+      ),
+    );
+    el.hidden = false;
+  }
 
   // ---- Composer ----
   const autosize = () => {
@@ -618,6 +701,16 @@ async function boot() {
   welcomeBack(initial.away);
   applyStatus(initial.status);
   debug.showMood(initial.mood, initial.clockOffsetMs);
+  let welcomed = false;
+  try {
+    welcomed = localStorage.getItem(WELCOME_KEY) === '1';
+  } catch {
+    /* fine */
+  }
+  if (viewMode === 'app') {
+    if (!welcomed) welcome();
+    else if (initial.status.state !== 'ready' && initial.status.provider !== 'mock' && ['offline', 'model_missing'].includes(initial.status.state)) openSetup();
+  }
   if (new URLSearchParams(location.search).has('debug') && initial.debugTools) debug.toggle(true);
   textarea.focus();
 }

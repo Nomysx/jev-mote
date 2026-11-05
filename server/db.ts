@@ -1,7 +1,9 @@
 // Local SQLite storage. All journal data stays in this one file.
+// Uses the SQLite built into Node (and Electron), so there is no native module to compile: the same
+// code runs in development, in tests and inside the desktop app on Windows, macOS and Linux.
 
-import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
+import type { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import type { Emotion, JournalEntry, LifeArea, LifeEvent, LifeEventData, LifeState, MoodState, Signals, Temperament } from '../shared/types';
 import type { VisualParams } from '../shared/visuals';
@@ -89,14 +91,29 @@ function toEntry(r: EntryRecord): JournalEntry {
   };
 }
 
+/** node:sqlite, loaded on first use without its one-time "experimental" console warning. */
+function sqlite(): typeof import('node:sqlite') {
+  const emit = process.emitWarning;
+  process.emitWarning = ((warning: string | Error, ...rest: unknown[]) => {
+    const text = typeof warning === 'string' ? warning : warning?.message;
+    if (/SQLite/i.test(text ?? '')) return;
+    return (emit as (...a: unknown[]) => void).call(process, warning, ...rest);
+  }) as typeof process.emitWarning;
+  try {
+    return process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite');
+  } finally {
+    process.emitWarning = emit;
+  }
+}
+
 export class MoteDb {
-  readonly db: Database.Database;
+  readonly db: DatabaseSync;
 
   constructor(file: string) {
     if (file !== ':memory:') mkdirSync(path.dirname(file), { recursive: true });
-    this.db = new Database(file);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    this.db = new (sqlite().DatabaseSync)(file);
+    this.db.exec('PRAGMA journal_mode = WAL');
+    this.db.exec('PRAGMA foreign_keys = ON');
     this.migrate();
   }
 
@@ -262,7 +279,7 @@ export class MoteDb {
   /** Entries recalled at least `minRecalls` times (core memories), any age. */
   coreMemories(blobId: number, minRecalls: number, limit = 40): JournalEntry[] {
     return (
-      this.db.prepare('SELECT * FROM entries WHERE blob_id = ? AND recalls >= ? ORDER BY recalls DESC, created_at DESC LIMIT ?').all(blobId, minRecalls, limit) as EntryRecord[]
+      this.db.prepare('SELECT * FROM entries WHERE blob_id = ? AND recalls >= ? ORDER BY recalls DESC, created_at DESC LIMIT ?').all(blobId, minRecalls, limit) as unknown as EntryRecord[]
     ).map(toEntry);
   }
 
@@ -325,7 +342,7 @@ export class MoteDb {
     }
     const limit = Math.min(Math.max(f.limit ?? 50, 1), 500);
     const sql = `SELECT * FROM entries ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC, id DESC LIMIT ${limit}`;
-    return (this.db.prepare(sql).all(...args) as EntryRecord[]).map(toEntry);
+    return (this.db.prepare(sql).all(...args) as unknown as EntryRecord[]).map(toEntry);
   }
 
   /** The blob's recent history, oldest first. */

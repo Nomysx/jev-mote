@@ -5,7 +5,7 @@
   "description": "Mote: a fully local emotional journaling companion. A clay-like blob that reacts to your journal entries with shape and color, driven by a local decision model.",
   "type": "module",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "concurrently -k -n server,client -c magenta,cyan \"npm:dev:server\" \"npm:dev:client\"",
@@ -15,12 +15,15 @@
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "desktop": "npm run build && npm run build:desktop && electron .",
+    "desktop:dist": "npm run build && npm run build:desktop && electron-builder",
+    "desktop:win": "npm run build && npm run build:desktop && electron-builder --win"
   },
   "dependencies": {
     "@fontsource/nunito": "^5.3.0",
     "@hono/node-server": "^2.1.6",
-    "better-sqlite3": "^13.0.3",
     "cross-env": "^10.1.0",
     "dotenv": "^18.0.9",
     "hono": "^4.13.16",
@@ -28,12 +31,16 @@
     "tsx": "^4.23.15"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.19.0",
     "@types/three": "^0.187.0",
     "concurrently": "^10.0.6",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.1.0"
-  }
+  },
+  "main": "dist/desktop/main.mjs",
+  "author": "Mote"
 }
